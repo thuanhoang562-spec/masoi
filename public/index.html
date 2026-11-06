@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ma Sói Online</title>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:dark;--bg:#12172b;--panel:#1b2240;--ink:#e8e4d4;--mute:#8a90ad;--wolf:#c23b4f;--moon:#e0b45a;--teal:#5fb3b0;--line:#2c3560;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 'Be Vietnam Pro',system-ui,sans-serif;transition:background .8s}
+body.day{--bg:#2d3354}
+.wrap{max-width:960px;margin:0 auto;padding:16px}
+.hidden{display:none!important}
+h1{font-size:2rem;font-weight:800;margin:.2em 0}
+input,button{font:inherit;color:inherit}
+input{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:100%}
+button{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--moon);outline-offset:2px}
+button.main{background:var(--wolf);border-color:var(--wolf);font-weight:600}
+#home{max-width:380px;margin:10vh auto 0;display:grid;gap:12px}
+#msg{color:var(--moon);min-height:1.5em;margin:0}
+header{display:flex;align-items:center;gap:14px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+#disc{width:42px;height:42px;border-radius:50%;box-shadow:inset -13px -4px 0 0 var(--moon);transition:all .8s}
+body.day #disc{background:var(--moon);box-shadow:0 0 0 6px #e0b45a33}
+header b{font-size:1.1rem}header span{color:var(--mute)}
+#timer{margin-left:auto;font-size:1.5rem;font-weight:800;font-variant-numeric:tabular-nums}
+main{display:grid;gap:16px;margin-top:16px}
+@media(min-width:760px){main{grid-template-columns:260px 1fr}}
+#players{display:grid;gap:6px;align-content:start}
+.p{display:flex;justify-content:space-between;text-align:left;width:100%}
+.p small{color:var(--mute)}
+.p:disabled{cursor:default;opacity:1}
+.p.dead{opacity:.45;text-decoration:line-through}
+.p.sel{border-color:var(--moon);box-shadow:0 0 0 2px var(--moon)}
+.p:not(:disabled):hover{border-color:var(--moon)}
+.r-wolf{color:var(--wolf)}.r-seer{color:var(--teal)}.r-witch{color:#b48be0}
+#panel{background:var(--panel);border-radius:10px;padding:14px;display:grid;gap:8px;justify-items:start}
+#panel p{margin:0}
+#log{background:var(--panel);border-radius:10px;padding:12px;height:280px;overflow:auto;margin-top:12px}
+#log p{margin:0 0 6px}
+.s{color:var(--moon)}.w b{color:var(--wolf)}.d{color:var(--mute)}
+#chat{display:flex;gap:8px;margin-top:8px}
+#mute{margin-left:8px;padding:6px 10px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section id="home">
+    <h1>Ma Sói</h1>
+    <input id="name" placeholder="Tên của bạn" maxlength="14" autocomplete="off">
+    <button class="main" id="create">Tạo ván mới</button>
+    <input id="code" placeholder="Mã ván (4 chữ cái)" maxlength="4" autocapitalize="characters">
+    <button id="join">Vào ván</button>
+    <p id="msg"></p>
+  </section>
+  <section id="game" class="hidden">
+    <header><div id="disc"></div><div><b id="ph"></b><br><span id="room"></span></div><div id="timer"></div><button id="mute" aria-label="Bật hoặc tắt âm thanh">🔊</button></header>
+    <main>
+      <aside id="players"></aside>
+      <div>
+        <div id="panel"></div>
+        <div id="log"></div>
+        <form id="chat"><input id="text" placeholder="Nhắn tin..." maxlength="160" autocomplete="off"><button>Gửi</button></form>
+      </div>
+    </main>
+  </section>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const ROLE = { wolf: 'Sói', villager: 'Dân làng', seer: 'Tiên tri', guard: 'Bảo vệ', witch: 'Phù thủy', hunter: 'Thợ săn', cupid: 'Cupid' };
+const PH = { lobby: 'Sảnh chờ', night: 'Đêm', day: 'Thảo luận', vote: 'Bỏ phiếu', hunter: 'Thợ săn nổ súng', over: 'Kết thúc' };
+const HINT = {
+  wolf: 'Chọn một người để cả bầy cùng cắn. Bạn nhắn tin được với Sói khác.',
+  seer: 'Chọn một người để soi xem có phải Sói không.',
+  guard: 'Chọn một người để che chắn (không chọn cùng người hai đêm liền).',
+  witch: 'Cứu nạn nhân bằng bình thuốc cứu, hoặc chọn một người để đầu độc. Mỗi bình dùng một lần.',
+  hunter: 'Ngủ yên. Khi chết, bạn được bắn theo một người.',
+  cupid: 'Đêm đầu: chọn hai người để ghép đôi. Một người chết, người kia chết theo.',
+  villager: 'Bạn ngủ say. Đợi trời sáng.'
+};
+
+/* ---------- Âm thanh (tổng hợp bằng WebAudio, không cần file) ---------- */
+let ac, mute = false;
+const snd = (f, d, ty = 'sine', to = f, v = .15, t0 = 0) => {
+  if (mute) return;
+  try {
+    ac = ac || new AudioContext(); ac.resume();
+    const t = ac.currentTime + t0, o = ac.createOscillator(), g = ac.createGain();
+    o.type = ty; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(to, t + d);
+    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.001, t + d);
+    o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + d);
+  } catch (e) {}
+};
+const SFX = {
+  night: () => { snd(300, 1.6, 'sawtooth', 640, .07); snd(640, 1.4, 'sawtooth', 360, .06, 1.5); },
+  day: () => [784, 988, 1175, 1568].forEach((f, i) => snd(f, .7, 'triangle', f, .1, i * .16)),
+  vote: () => { snd(90, .3, 'square', 45, .2); snd(90, .3, 'square', 45, .2, .45); },
+  hunter: () => { snd(200, .25, 'sawtooth', 40, .25); },
+  death: () => snd(110, 1.3, 'sine', 40, .3),
+  tick: () => snd(880, .07, 'square', 880, .04),
+  win: () => [523, 659, 784, 1047].forEach((f, i) => snd(f, .5, 'triangle', f, .12, i * .2)),
+  pick: () => snd(520, .1, 'triangle', 700, .08)
+};
+$('mute').onclick = () => { mute = !mute; $('mute').textContent = mute ? '🔇' : '🔊'; };
+
+/* ---------- Kết nối ---------- */
+const s = io();
+let st = null, end = 0, pick = [], lastKey = '', lastDead = 0, lastTick = 0, me = null, isHost = false;
+const tok = localStorage.tok || (localStorage.tok = Math.random().toString(36).slice(2) + Date.now().toString(36));
+const say = t => $('msg').textContent = t;
+const nm = () => { const n = $('name').value.trim(); localStorage.name = n; return n; };
+$('name').value = localStorage.name || '';
+$('create').onclick = () => { const n = nm(); n ? s.emit('create', { name: n, token: tok }) : say('Hãy nhập tên.'); };
+$('join').onclick = () => s.emit('join', { code: $('code').value.trim(), name: nm(), token: tok });
+s.on('connect', () => { if (localStorage.room) s.emit('join', { code: localStorage.room, name: localStorage.name, token: tok }); });
+s.on('err', m => { say(m); if (m.includes('phòng')) localStorage.removeItem('room'); });
+const send = d => d.t === 'chat' ? s.emit('chat', d.x) : d.t === 'start' ? s.emit('start') : s.emit('act', d);
+s.on('state', x => {
+  const old = st; st = x; me = x.me; isHost = x.host; end = Date.now() + x.left; localStorage.room = x.code;
+  $('home').classList.add('hidden'); $('game').classList.remove('hidden'); $('room').textContent = 'Mã ván: ' + x.code;
+  const key = x.ph + x.day;
+  if (key !== lastKey) { lastKey = key; pick = []; if (SFX[x.ph]) SFX[x.ph](); if (x.ph === 'over') SFX.win(); }
+  const dead = x.P.filter(p => !p.a).length; if (old && dead > lastDead) SFX.death(); lastDead = dead;
+  render();
+});
+
+/* ---------- Giao diện ---------- */
+const meP = () => st && st.P.find(p => p.i === me);
+const known = q => st.ph === 'over' || q.i === me || (meP() && meP().r === 'wolf' && q.r === 'wolf');
+function can(q) {
+  const m = meP(); if (!m || !q.a) return false;
+  if (st.ph === 'night' && m.a) {
+    if (m.r === 'wolf') return q.r !== 'wolf';
+    if (m.r === 'seer') return q.i !== me;
+    if (m.r === 'guard') return q.i !== st.lg;
+    if (m.r === 'witch') return st.wi.p > 0;
+    if (m.r === 'cupid') return st.day === 1;
+  }
+  if (st.ph === 'vote') return m.a && q.i !== me;
+  if (st.ph === 'hunter') return !m.a && st.hp.includes(me);
+  return false;
+}
+function render() {
+  if (!st) { $('panel').innerHTML = '<p>Đang kết nối...</p>'; return; }
+  const m = meP(), role = m && m.r;
+  document.body.classList.toggle('day', st.ph === 'day' || st.ph === 'vote');
+  $('ph').textContent = PH[st.ph] + (st.day ? ` · ngày ${st.day}` : '');
+  $('players').innerHTML = st.P.map(q => `<button class="p ${q.a ? '' : 'dead'} ${pick.includes(q.i) ? 'sel' : ''}" data-i="${q.i}" ${can(q) ? '' : 'disabled'}>
+    <span>${esc(q.n)}${q.i === me ? ' (bạn)' : ''}</span><small class="r-${known(q) ? q.r : ''}">${known(q) && q.r ? ROLE[q.r] : ''}</small></button>`).join('');
+  let h = '';
+  if (role) h += `<p>Vai của bạn: <b class="r-${role}">${ROLE[role]}</b>${m.a ? '' : ' (đã chết, bạn vẫn xem được ván chơi)'}</p>`;
+  if (st.ph === 'lobby') h += `<p>Đã có ${st.P.length} người. Cần 5 đến 12 người để bắt đầu.</p>`;
+  if (st.ph === 'night' && m && m.a) {
+    h += `<p>${HINT[role]}</p>`;
+    if (role === 'witch') {
+      const v = st.P.find(p => p.i === st.wv);
+      h += `<p>Nạn nhân đêm nay: <b>${v ? esc(v.n) : 'chưa rõ'}</b>. Thuốc cứu: ${st.wi.h}, thuốc độc: ${st.wi.p}.</p>`;
+      if (st.wi.h && v) h += '<button id="save">Cứu nạn nhân</button>';
+      h += '<button id="skip">Không làm gì</button>';
+    }
+  }
+  if (st.ph === 'day') h += '<p>Bàn bạc xem ai là Sói. Sắp tới sẽ bỏ phiếu.</p>';
+  if (st.ph === 'vote' && m && m.a) h += '<p>Chọn người bạn muốn treo cổ.</p>';
+  if (st.ph === 'hunter') h += st.hp.includes(me) ? '<p>Bạn là Thợ săn đã ngã xuống. Chọn người để bắn!</p>' : '<p>Thợ săn đang nhắm súng...</p>';
+  if (st.ph === 'over') h += `<p><b>${st.win === 'wolf' ? 'Sói thắng' : 'Dân làng thắng'}</b></p>`;
+  const mine = (st.seen || []); if (mine.length) h += `<p class="r-seer">${mine.map(esc).join('<br>')}</p>`;
+  if (['lobby', 'over'].includes(st.ph)) h += isHost ? `<button class="main" id="start">${st.ph === 'over' ? 'Chơi ván mới' : 'Bắt đầu ván'}</button>` : '<p>Đợi chủ ván bắt đầu.</p>';
+  $('panel').innerHTML = h;
+  if ($('start')) $('start').onclick = () => send({ t: 'start' });
+  if ($('save')) $('save').onclick = () => send({ t: 'act', k: 'save' });
+  if ($('skip')) $('skip').onclick = () => send({ t: 'act', k: 'skip' });
+  const log = $('log'), bottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 30;
+  log.innerHTML = st.log.filter(e => e.c !== 'w' || (role === 'wolf') || st.ph === 'over').filter(e => e.c !== 'd' || (m && !m.a) || st.ph === 'over')
+    .map(e => e.c === 's' ? `<p class="s">${esc(e.t)}</p>` : `<p class="${e.c}"><b>${e.c === 'w' ? '[Sói] ' : e.c === 'd' ? '[Người chết] ' : ''}${esc(e.f)}:</b> ${esc(e.t)}</p>`).join('');
+  if (bottom) log.scrollTop = log.scrollHeight;
+}
+$('players').onclick = e => {
+  const b = e.target.closest('button'); if (!b || b.disabled) return;
+  const i = b.dataset.i, r = meP().r; SFX.pick();
+  pick = (st.ph === 'night' && r === 'cupid') ? [...pick, i].slice(-2) : [i]; render();
+  send({ t: 'act', k: st.ph === 'night' && r === 'witch' ? 'poison' : 'pick', x: i });
+};
+$('chat').onsubmit = e => { e.preventDefault(); const t = $('text').value.trim(); if (t) send({ t: 'chat', x: t }); $('text').value = ''; };
+setInterval(() => {
+  const s = st && end && !['lobby', 'over'].includes(st.ph) ? Math.max(0, Math.ceil((end - Date.now()) / 1000)) : null;
+  $('timer').textContent = s === null ? '' : s + 's';
+  if (s !== null && s <= 5 && s > 0 && s !== lastTick) { lastTick = s; SFX.tick(); }
+}, 300);
+
+</script>
+</body>
+</html>
