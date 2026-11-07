@@ -239,7 +239,7 @@ function render() {
     <span>${st.dz.includes(q.i) ? '🔥 ' : ''}${st.mu === q.i && st.ph === 'day' ? '🤐 ' : ''}${esc(q.n)}${q.i === me ? ' (bạn)' : ''}</span><small class="r-${known(q) ? q.r : ''}">${known(q) && q.r ? ROLE[q.r] : ''}</small></button>`).join('');
   let h = '';
   if (role) h += `<div class="mycard">${card(role, 1)}</div><p>Vai của bạn: <b class="r-${role}">${ROLE[role]}</b>${m.a ? '' : ' (đã chết, bạn vẫn xem được ván chơi)'}</p>`;
-  if (st.ph === 'lobby') h += `<p>Đã có ${st.P.length} người. Cần 5 đến 12 người để bắt đầu.</p>`;
+  if (st.ph === 'lobby') h += `<p>Đã có ${st.P.length} người. Cần 5 đến 15 người để bắt đầu.</p>`;
   if (st.ph === 'night' && m && m.a) {
     h += `<p>${HINT[role]}</p>`;
     if (role === 'witch') {
