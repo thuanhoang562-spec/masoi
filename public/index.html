@@ -160,80 +160,23 @@ const SFX = {
 };
 $('mute').onclick = () => { mute = !mute; $('mute').textContent = mute ? '🔇' : '🔊'; applyMusic(); };
 
-/* ---------- Nhạc nền: sảnh chờ êm dịu, ban đêm rùng rợn, ban ngày im lặng ---------- */
-let mus = null, musMode = null;
-const actx = () => (ac = ac || new AudioContext());
-const hz = n => 440 * Math.pow(2, (n - 69) / 12);
-const MUS = {
-  // Đêm: cung La thứ, hợp âm chuyển chậm, vài nốt hộp nhạc thưa, gió thoảng và tiếng tim đập xa
-  night: { chords: [[45, 57, 60, 64], [41, 53, 57, 60], [38, 50, 53, 57], [40, 52, 56, 59]], scale: [69, 72, 74, 76, 79, 81], gain: .5, pad: 700, mel: .05, dark: true },
-  // Sảnh chờ: êm, sáng hơn, rất nhỏ
-  lobby: { chords: [[48, 55, 59, 64], [45, 52, 55, 60], [41, 48, 52, 57], [43, 50, 55, 59]], scale: [72, 74, 76, 79, 81, 84], gain: .28, pad: 1100, mel: .035, dark: false }
-};
-function stopMus() {
-  if (!mus) return; const m = mus; mus = null; [m.t, m.t2, m.t3].forEach(clearTimeout);
-  m.g.gain.cancelScheduledValues(ac.currentTime); m.g.gain.setTargetAtTime(0, ac.currentTime, .4);
-  setTimeout(() => { try { m.fb.gain.value = 0; m.bus.disconnect(); m.g.disconnect(); } catch (e) {} }, 2500);
-}
-function startMus(mode) {
-  const c = actx(), cfg = MUS[mode]; c.resume();
-  const g = c.createGain(), bus = c.createGain(), dl = c.createDelay(1.5), fb = c.createGain(), lp = c.createBiquadFilter(), pf = c.createBiquadFilter();
-  const m = mus = { g, bus, fb, t: 0, t2: 0, t3: 0 };
-  g.gain.value = 0; g.connect(c.destination);
-  dl.delayTime.value = .6; fb.gain.value = .4; lp.type = 'lowpass'; lp.frequency.value = 1600;
-  bus.connect(g); bus.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(g);
-  pf.type = 'lowpass'; pf.frequency.value = cfg.pad; pf.connect(bus);
-  g.gain.setTargetAtTime(cfg.gain, c.currentTime, 2);
-  const note = (f, dur, ty, vol, dest, att) => {
-    const t = c.currentTime, o = c.createOscillator(), x = c.createGain();
-    o.type = ty; o.frequency.value = f; x.gain.setValueAtTime(0, t);
-    x.gain.linearRampToValueAtTime(vol, t + att); x.gain.exponentialRampToValueAtTime(.0001, t + dur);
-    o.connect(x); x.connect(dest); o.start(t); o.stop(t + dur + .1);
-  };
-  let ci = 0, mi = 2;
-  const chord = () => {
-    if (mus !== m) return;
-    cfg.chords[ci++ % cfg.chords.length].forEach((n, k) => note(hz(n), 10, k ? 'triangle' : 'sine', k ? .05 : .09, pf, 2.6));
-    m.t = setTimeout(chord, 8000);
-  };
-  const mel = () => {
-    if (mus !== m) return;
-    if (Math.random() < .8) {
-      mi = Math.max(0, Math.min(cfg.scale.length - 1, mi + Math.floor(Math.random() * 5) - 2));
-      const f = hz(cfg.scale[mi]); note(f, 2.8, 'sine', cfg.mel, bus, .01); note(f * 2, 1.2, 'triangle', cfg.mel * .25, bus, .01);
-    }
-    m.t2 = setTimeout(mel, 1800 + Math.random() * 3400);
-  };
-  chord(); m.t2 = setTimeout(mel, 2500);
-  if (cfg.dark) {
-    const nb = c.createBuffer(1, c.sampleRate * 4, c.sampleRate), d = nb.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    const beat = off => {
-      const t = c.currentTime + off, o = c.createOscillator(), x = c.createGain();
-      o.frequency.setValueAtTime(70, t); o.frequency.exponentialRampToValueAtTime(35, t + .25);
-      x.gain.setValueAtTime(.2, t); x.gain.exponentialRampToValueAtTime(.001, t + .3);
-      o.connect(x); x.connect(g); o.start(t); o.stop(t + .35);
-    };
-    const event = () => {
-      if (mus !== m) return;
-      if (Math.random() < .5) { beat(0); beat(.34); }
-      else {
-        const s = c.createBufferSource(), bp = c.createBiquadFilter(), x = c.createGain(), t = c.currentTime;
-        s.buffer = nb; bp.type = 'bandpass'; bp.Q.value = 2; bp.frequency.setValueAtTime(250, t); bp.frequency.linearRampToValueAtTime(650, t + 4);
-        x.gain.setValueAtTime(0, t); x.gain.linearRampToValueAtTime(.05, t + 2); x.gain.linearRampToValueAtTime(0, t + 4);
-        s.connect(bp); bp.connect(x); x.connect(bus); s.start(t); s.stop(t + 4.1);
-      }
-      m.t3 = setTimeout(event, 7000 + Math.random() * 9000);
-    };
-    m.t3 = setTimeout(event, 5000);
-  }
+/* ---------- Nhạc nền: một bản nhạc cho sảnh chờ và ban đêm, ban ngày im lặng ---------- */
+const bgm = new Audio('/music.mp3'); bgm.loop = true; bgm.volume = 0; bgm.preload = 'auto';
+let fadeT;
+function fadeTo(v, done) {
+  clearInterval(fadeT);
+  fadeT = setInterval(() => {
+    const d = v - bgm.volume;
+    if (Math.abs(d) < .02) { bgm.volume = v; clearInterval(fadeT); if (done) done(); return; }
+    bgm.volume = Math.max(0, Math.min(1, bgm.volume + Math.sign(d) * .02));
+  }, 60);
 }
 function applyMusic() {
-  const mode = mute || !st ? null : st.ph === 'night' ? 'night' : st.ph === 'lobby' ? 'lobby' : null;
-  if (mode === musMode) return;
-  stopMus(); musMode = mode; if (mode) startMus(mode);
+  const want = !mute && st && (st.ph === 'night' || st.ph === 'lobby');
+  if (want) { if (bgm.paused) bgm.play().catch(() => {}); fadeTo(.4); }
+  else if (!bgm.paused) fadeTo(0, () => bgm.pause());
 }
-document.addEventListener('pointerdown', () => { if (ac && ac.state !== 'running') ac.resume(); });
+document.addEventListener('pointerdown', () => { if (ac && ac.state !== 'running') ac.resume(); applyMusic(); });
 
 
 /* ---------- Kết nối ---------- */
