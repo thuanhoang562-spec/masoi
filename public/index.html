@@ -133,7 +133,48 @@ const SFX = {
   win: () => [523, 659, 784, 1047].forEach((f, i) => snd(f, .5, 'triangle', f, .12, i * .2)),
   pick: () => snd(520, .1, 'triangle', 700, .08)
 };
-$('mute').onclick = () => { mute = !mute; $('mute').textContent = mute ? '🔇' : '🔊'; };
+$('mute').onclick = () => { mute = !mute; $('mute').textContent = mute ? '🔇' : '🔊'; applyMusic(); };
+
+/* ---------- Nhạc nền: sảnh chờ êm dịu, ban đêm rùng rợn, ban ngày im lặng ---------- */
+let mus = null, musMode = null;
+const actx = () => (ac = ac || new AudioContext());
+function stopMus() {
+  if (!mus) return; const m = mus; mus = null; clearTimeout(m.t);
+  m.g.gain.cancelScheduledValues(ac.currentTime); m.g.gain.setTargetAtTime(0, ac.currentTime, .35);
+  setTimeout(() => m.nodes.forEach(n => { try { n.stop(); } catch (e) {} }), 1800);
+}
+function startMus(mode) {
+  const c = actx(); c.resume();
+  const g = c.createGain(), f = c.createBiquadFilter(), nodes = [], m = mus = { g, nodes, t: 0 };
+  g.gain.value = 0; g.connect(c.destination); f.type = 'lowpass'; f.connect(g);
+  const osc = (fr, ty, v) => { const o = c.createOscillator(), x = c.createGain(); o.type = ty; o.frequency.value = fr; x.gain.value = v; o.connect(x); x.connect(f); o.start(); nodes.push(o); };
+  const lfo = (rate, depth, param) => { const o = c.createOscillator(), x = c.createGain(); o.frequency.value = rate; x.gain.value = depth; o.connect(x); x.connect(param); o.start(); nodes.push(o); };
+  if (mode === 'night') {
+    f.frequency.value = 420;
+    osc(55, 'sawtooth', .5); osc(58.3, 'sawtooth', .5); osc(82.4, 'sine', .6); osc(116.5, 'sine', .25);
+    g.gain.setTargetAtTime(.2, c.currentTime, 1.5); lfo(.13, .07, g.gain); lfo(.05, 120, f.frequency);
+    const sting = () => {
+      if (mus !== m) return;
+      const k = Math.floor(Math.random() * 3);
+      if (k === 0) { snd(1500, 3, 'sine', 650, .035); snd(1590, 3, 'sine', 700, .03); }
+      else if (k === 1) { snd(62, .22, 'sine', 38, .35); snd(62, .22, 'sine', 38, .3, .3); }
+      else { snd(90, 2.2, 'sawtooth', 45, .05); snd(95, 2.2, 'square', 48, .02); }
+      m.t = setTimeout(sting, 5000 + Math.random() * 8000);
+    };
+    m.t = setTimeout(sting, 3000);
+  } else {
+    f.frequency.value = 1400;
+    [220, 261.6, 329.6, 440].forEach((fr, i) => osc(fr, 'sine', .2 - i * .03));
+    g.gain.setTargetAtTime(.07, c.currentTime, 2); lfo(.1, .02, g.gain);
+  }
+}
+function applyMusic() {
+  const mode = mute || !st ? null : st.ph === 'night' ? 'night' : st.ph === 'lobby' ? 'lobby' : null;
+  if (mode === musMode) return;
+  stopMus(); musMode = mode; if (mode) startMus(mode);
+}
+document.addEventListener('pointerdown', () => { if (ac && ac.state !== 'running') ac.resume(); });
+
 
 /* ---------- Kết nối ---------- */
 const s = io();
@@ -153,7 +194,7 @@ s.on('state', x => {
   const key = x.ph + x.day;
   if (key !== lastKey) { lastKey = key; pick = []; if (SFX[x.ph]) SFX[x.ph](); if (x.ph === 'over') SFX.win(); }
   const dead = x.P.filter(p => !p.a).length; if (old && dead > lastDead) SFX.death(); lastDead = dead;
-  render(); syncVoice();
+  render(); syncVoice(); applyMusic();
 });
 
 /* ---------- Giao diện ---------- */
@@ -191,7 +232,7 @@ function render() {
       h += '<button id="skip">Không làm gì</button>';
     }
   }
-  if (st.ph === 'day') h += '<p>Bàn bạc xem ai là Sói. Sắp tới sẽ bỏ phiếu.</p>';
+  if (st.ph === 'day') h += '<p>Bàn bạc xem ai là Sói. Đây là lúc được dùng mic. Sắp tới sẽ bỏ phiếu.</p>';
   if (st.ph === 'vote' && m && m.a) h += '<p>Chọn người bạn muốn treo cổ.</p>';
   if (st.ph === 'hunter') h += st.hp.includes(me) ? '<p>Bạn là Thợ săn đã ngã xuống. Chọn người để bắn!</p>' : '<p>Thợ săn đang nhắm súng...</p>';
   if (st.ph === 'over') h += `<p><b>${st.win === 'wolf' ? 'Sói thắng' : 'Dân làng thắng'}</b></p>`;
@@ -225,12 +266,18 @@ setInterval(() => {
 const ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 const pcs = {}; let local = null, micOn = true;
 $('panel').addEventListener('toggle', e => { if (e.target.id === 'guide') guideOpen = e.target.open; }, true);
+// Mic chỉ mở ở sảnh chờ và khi trời sáng (pha thảo luận). Người đã chết không được nói.
 function allow(q) {
-  const m = meP(); if (!q || !m) return false;
-  if (st.ph === 'lobby' || st.ph === 'over') return true;
-  if (!q.a) return !m.a;
-  if (st.ph === 'night') return !!m.a && m.r === 'wolf' && q.r === 'wolf';
-  return true;
+  if (!q || !st) return false;
+  if (st.ph === 'lobby') return true;
+  return st.ph === 'day' && !!q.a;
+}
+function canSpeak() { const m = meP(); return !!m && (st.ph === 'lobby' || (st.ph === 'day' && !!m.a)); }
+function applyMic() {
+  if (!local) return;
+  const ok = canSpeak();
+  local.getTracks().forEach(t => t.enabled = micOn && ok);
+  $('mm').textContent = !ok ? 'Mic: khóa' : micOn ? 'Mic: bật' : 'Mic: tắt';
 }
 function drop(id) { const x = pcs[id]; if (!x) return; try { x.pc.close(); } catch (e) {} if (x.au) { x.au.pause(); x.au.srcObject = null; } delete pcs[id]; }
 function peer(id) {
@@ -250,7 +297,7 @@ function syncVoice() {
     st.P.forEach(q => { if (q.i !== me && q.v && !pcs[q.i] && me < q.i) call(q.i); });
     Object.keys(pcs).forEach(id => { const q = st.P.find(p => p.i === id); if (!q || !q.v) drop(id); });
   }
-  filterAudio();
+  filterAudio(); applyMic();
 }
 s.on('sig', ({ from, data }) => {
   if (!local) return;
@@ -270,10 +317,10 @@ $('voice').onclick = async () => {
   if (local) return leaveVoice();
   try { local = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
   catch (e) { return alert('Không mở được micro. Hãy cho phép quyền micro cho trang này (cần kết nối https).'); }
-  micOn = true; $('mm').textContent = 'Mic: bật'; $('mm').classList.remove('hidden'); $('voice').textContent = '🎙 Rời thoại';
-  s.emit('voice', true); syncVoice();
+  micOn = true; $('mm').classList.remove('hidden'); $('voice').textContent = '🎙 Rời thoại';
+  s.emit('voice', true); syncVoice(); applyMic();
 };
-$('mm').onclick = () => { micOn = !micOn; local.getTracks().forEach(t => t.enabled = micOn); $('mm').textContent = micOn ? 'Mic: bật' : 'Mic: tắt'; };
+$('mm').onclick = () => { micOn = !micOn; applyMic(); };
 </script>
 </body>
 </html>
