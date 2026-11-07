@@ -25,7 +25,7 @@ function view(r, p) {
   const over = r.ph === 'over', wolf = p.r === 'wolf', witch = p.r === 'witch';
   return {
     code: r.code, ph: r.ph, day: r.day, win: r.win, me: p.i, host: r.P[0] === p, left: Math.max(0, r.dl - Date.now()),
-    P: r.P.map(q => ({ i: q.i, n: q.n, a: q.a ? 1 : 0, r: over || q === p || (wolf && q.r === 'wolf') ? q.r : '' })),
+    P: r.P.map(q => ({ i: q.i, n: q.n, a: q.a ? 1 : 0, v: q.voice ? 1 : 0, r: over || q === p || (wolf && q.r === 'wolf') ? q.r : '' })),
     log: r.log.filter(e => over || e.c === 's' || e.c === 'c' || (e.c === 'w' && wolf) || (e.c === 'd' && !p.a)).slice(-60),
     seen: p.seen, wi: witch ? r.wi : { h: 0, p: 0 }, lg: p.r === 'guard' ? r.lg : null,
     hp: r.H.map(h => h.i), wv: witch ? lead(wolfTally(r)) : null
@@ -120,7 +120,7 @@ io.on('connection', s => {
   const ctx = () => { const r = rooms.get(s.data.room), p = r && gp(r, s.data.pid); return r && p ? [r, p] : []; };
   const err = m => s.emit('err', m);
   const enter = (r, p) => { p.sid = s.id; s.data = { room: r.code, pid: p.i }; bc(r); };
-  const mk = (n, tok) => ({ i: uid(), n, tok, sid: null, a: true, r: '', love: null, seen: [] });
+  const mk = (n, tok) => ({ i: uid(), n, tok, sid: null, a: true, r: '', love: null, seen: [], voice: false });
 
   s.on('create', ({ name, token }) => {
     name = clean(name); if (!name) return err('Hãy nhập tên.');
@@ -144,6 +144,8 @@ io.on('connection', s => {
     if (r.P.length < 5) return err('Cần ít nhất 5 người.');
     begin(r);
   });
+  s.on('voice', on => { const [r, p] = ctx(); if (!r) return; p.voice = !!on; bc(r); });
+  s.on('sig', ({ to, data } = {}) => { const [r, p] = ctx(); if (!r) return; const t = gp(r, to); if (t && t.sid) io.to(t.sid).emit('sig', { from: p.i, data }); });
   s.on('act', d => { const [r, p] = ctx(); if (r && d) act(r, p, d); });
   s.on('chat', text => {
     const [r, p] = ctx(); if (!r) return;
@@ -154,7 +156,7 @@ io.on('connection', s => {
     r.log.push({ c, f: p.n, t: text }); bc(r);
   });
   s.on('disconnect', () => {
-    const [r, p] = ctx(); if (!r || p.sid !== s.id) return; p.sid = null;
+    const [r, p] = ctx(); if (!r || p.sid !== s.id) return; p.sid = null; p.voice = false;
     if (r.ph === 'lobby') r.P = r.P.filter(x => x !== p);
     if (r.P.every(x => !x.sid)) { clearTimeout(r.tm); rooms.delete(r.code); } else bc(r);
   });
