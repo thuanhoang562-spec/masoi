@@ -43,7 +43,7 @@ function go(r, ph) {
 const VN = { wolf: 'Sói', seer: 'Tiên tri', guard: 'Bảo vệ', witch: 'Phù thủy', hunter: 'Thợ săn', cupid: 'Cupid', mute: 'Kẻ câm', arsonist: 'Kẻ phóng hỏa', cub: 'Sói con', villager: 'Dân làng' };
 // Bộ vai cố định theo số người: 5 Tiên tri, 6 Bảo vệ, 7 Phù thủy, 8 Thợ săn + Sói con, 9 Cupid, 10 Kẻ câm, 11 Kẻ phóng hỏa.
 function compose(n) {
-  const w = n <= 6 ? 1 : n <= 9 ? 2 : 3;
+  const w = n <= 6 ? 1 : n <= 9 ? 2 : n <= 12 ? 3 : 4;
   const wolves = Array(w).fill('wolf'); if (n >= 8) wolves[0] = 'cub';
   const sp = ['seer', 'guard', 'witch', 'hunter', 'cupid', 'mute', 'arsonist'].filter((_, i) => n >= 5 + i);
   return [...wolves, ...sp, ...Array(n - w - sp.length).fill('villager')];
@@ -165,7 +165,7 @@ io.on('connection', s => {
     if (!p) {
       name = clean(name); if (!name) return err('Hãy nhập tên.');
       if (r.ph !== 'lobby') return err('Ván đang diễn ra, chưa vào được.');
-      if (r.P.length >= 12) return err('Phòng đã đủ 12 người.');
+      if (r.P.length >= 15) return err('Phòng đã đủ 15 người.');
       if (r.P.some(x => x.n === name)) return err('Tên này đã có người dùng.');
       p = mk(name, token); r.P.push(p);
     }
