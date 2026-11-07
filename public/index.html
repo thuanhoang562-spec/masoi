@@ -21,7 +21,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--moon);outline-o
 button.main{background:var(--wolf);border-color:var(--wolf);font-weight:600}
 #home{max-width:380px;margin:10vh auto 0;display:grid;gap:12px}
 #msg{color:var(--moon);min-height:1.5em;margin:0}
-header{display:flex;align-items:center;gap:14px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+header{flex-wrap:wrap;display:flex;align-items:center;gap:14px;padding-bottom:12px;border-bottom:1px solid var(--line)}
 #disc{width:42px;height:42px;border-radius:50%;box-shadow:inset -13px -4px 0 0 var(--moon);transition:all .8s}
 body.day #disc{background:var(--moon);box-shadow:0 0 0 6px #e0b45a33}
 header b{font-size:1.1rem}header span{color:var(--mute)}
@@ -42,7 +42,11 @@ main{display:grid;gap:16px;margin-top:16px}
 #log p{margin:0 0 6px}
 .s{color:var(--moon)}.w b{color:var(--wolf)}.d{color:var(--mute)}
 #chat{display:flex;gap:8px;margin-top:8px}
-#mute{margin-left:8px;padding:6px 10px}
+header button{padding:6px 10px;font-size:.85rem}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:12px;margin-top:10px}
+.cardbox{text-align:center;font-size:.78rem;color:var(--mute);line-height:1.35}
+details{width:100%}summary{cursor:pointer;color:var(--moon)}
+.mycard{line-height:0}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -57,7 +61,7 @@ main{display:grid;gap:16px;margin-top:16px}
     <p id="msg"></p>
   </section>
   <section id="game" class="hidden">
-    <header><div id="disc"></div><div><b id="ph"></b><br><span id="room"></span></div><div id="timer"></div><button id="mute" aria-label="Bật hoặc tắt âm thanh">🔊</button></header>
+    <header><div id="disc"></div><div><b id="ph"></b><br><span id="room"></span></div><div id="timer"></div><button id="mute" aria-label="Bật hoặc tắt âm thanh">🔊</button><button id="voice">🎙 Tham gia thoại</button><button id="mm" class="hidden">Mic: bật</button></header>
     <main>
       <aside id="players"></aside>
       <div>
@@ -83,6 +87,29 @@ const HINT = {
   cupid: 'Đêm đầu: chọn hai người để ghép đôi. Một người chết, người kia chết theo.',
   villager: 'Bạn ngủ say. Đợi trời sáng.'
 };
+
+/* ---------- Thẻ vai trò (SVG) ---------- */
+const CLR = { wolf: ['#3a0b16', '#c23b4f'], villager: ['#2e2616', '#c4a45e'], seer: ['#0b2c33', '#5fb3b0'], guard: ['#14264a', '#6c8fd6'], witch: ['#27123f', '#b48be0'], hunter: ['#14301a', '#6fae6a'], cupid: ['#451630', '#f08fb4'] };
+const ART = {
+  wolf: '<path d="M30 70 L38 28 L56 50 L64 50 L82 28 L90 70 L76 108 L60 118 L44 108Z" fill="C"/><circle cx="48" cy="72" r="5" fill="#12172b"/><circle cx="72" cy="72" r="5" fill="#12172b"/><path d="M52 96 L60 104 L68 96Z" fill="#12172b"/>',
+  villager: '<path d="M26 80 L60 44 L94 80Z" fill="C"/><rect x="36" y="80" width="48" height="34" fill="C" opacity=".75"/><rect x="53" y="92" width="14" height="22" fill="#12172b"/>',
+  seer: '<circle cx="60" cy="70" r="32" fill="none" stroke="C" stroke-width="5"/><path d="M34 70 Q60 44 86 70 Q60 96 34 70Z" fill="C" opacity=".35"/><circle cx="60" cy="70" r="9" fill="C"/><rect x="40" y="106" width="40" height="9" rx="3" fill="C"/>',
+  guard: '<path d="M60 34 L90 46 V76 Q90 104 60 118 Q30 104 30 76 V46Z" fill="C"/><path d="M60 48 V106 M40 72 H80" stroke="#12172b" stroke-width="5"/>',
+  witch: '<path d="M24 100 H96 L72 40 Q64 28 56 38Z" fill="C"/><rect x="38" y="86" width="44" height="8" fill="#12172b" opacity=".5"/><circle cx="86" cy="34" r="4" fill="#e0b45a"/><circle cx="34" cy="48" r="3" fill="#e0b45a"/>',
+  hunter: '<circle cx="60" cy="72" r="30" fill="none" stroke="C" stroke-width="5"/><circle cx="60" cy="72" r="6" fill="C"/><path d="M60 28 V48 M60 96 V116 M16 72 H36 M84 72 H104" stroke="C" stroke-width="5"/>',
+  cupid: '<path d="M60 108 L30 76 Q22 56 40 50 Q54 48 60 62 Q66 48 80 50 Q98 56 90 76Z" fill="C"/><path d="M22 114 L98 38 M98 38 L84 40 M98 38 L96 52" stroke="#e8e4d4" stroke-width="4" fill="none"/>'
+};
+const DESC = {
+  wolf: 'Mỗi đêm cùng bầy chọn một người để cắn.', villager: 'Không có kỹ năng. Dùng lý lẽ để tìm Sói.',
+  seer: 'Mỗi đêm soi một người xem có phải Sói không.', guard: 'Mỗi đêm che chắn một người, không lặp hai đêm liền.',
+  witch: 'Một bình cứu, một bình độc, mỗi bình dùng một lần.', hunter: 'Khi chết được bắn theo một người.',
+  cupid: 'Đêm đầu ghép đôi hai người. Một người chết, người kia chết theo.'
+};
+function card(r, big) {
+  const [a, b] = CLR[r], w = big ? 150 : 100;
+  return `<svg viewBox="0 0 120 170" width="${w}" role="img" aria-label="Thẻ ${ROLE[r]}"><defs><linearGradient id="g-${r}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${a}"/></linearGradient></defs><rect x="2" y="2" width="116" height="166" rx="12" fill="url(#g-${r})" stroke="${b}" stroke-width="2.5"/>${ART[r].replace(/"C"/g, `"${b}"`)}<text x="60" y="150" text-anchor="middle" font-size="15" font-weight="800" fill="#e8e4d4" font-family="Be Vietnam Pro,sans-serif">${ROLE[r]}</text></svg>`;
+}
+let guideOpen = false;
 
 /* ---------- Âm thanh (tổng hợp bằng WebAudio, không cần file) ---------- */
 let ac, mute = false;
@@ -126,7 +153,7 @@ s.on('state', x => {
   const key = x.ph + x.day;
   if (key !== lastKey) { lastKey = key; pick = []; if (SFX[x.ph]) SFX[x.ph](); if (x.ph === 'over') SFX.win(); }
   const dead = x.P.filter(p => !p.a).length; if (old && dead > lastDead) SFX.death(); lastDead = dead;
-  render();
+  render(); syncVoice();
 });
 
 /* ---------- Giao diện ---------- */
@@ -153,7 +180,7 @@ function render() {
   $('players').innerHTML = st.P.map(q => `<button class="p ${q.a ? '' : 'dead'} ${pick.includes(q.i) ? 'sel' : ''}" data-i="${q.i}" ${can(q) ? '' : 'disabled'}>
     <span>${esc(q.n)}${q.i === me ? ' (bạn)' : ''}</span><small class="r-${known(q) ? q.r : ''}">${known(q) && q.r ? ROLE[q.r] : ''}</small></button>`).join('');
   let h = '';
-  if (role) h += `<p>Vai của bạn: <b class="r-${role}">${ROLE[role]}</b>${m.a ? '' : ' (đã chết, bạn vẫn xem được ván chơi)'}</p>`;
+  if (role) h += `<div class="mycard">${card(role, 1)}</div><p>Vai của bạn: <b class="r-${role}">${ROLE[role]}</b>${m.a ? '' : ' (đã chết, bạn vẫn xem được ván chơi)'}</p>`;
   if (st.ph === 'lobby') h += `<p>Đã có ${st.P.length} người. Cần 5 đến 12 người để bắt đầu.</p>`;
   if (st.ph === 'night' && m && m.a) {
     h += `<p>${HINT[role]}</p>`;
@@ -170,6 +197,7 @@ function render() {
   if (st.ph === 'over') h += `<p><b>${st.win === 'wolf' ? 'Sói thắng' : 'Dân làng thắng'}</b></p>`;
   const mine = (st.seen || []); if (mine.length) h += `<p class="r-seer">${mine.map(esc).join('<br>')}</p>`;
   if (['lobby', 'over'].includes(st.ph)) h += isHost ? `<button class="main" id="start">${st.ph === 'over' ? 'Chơi ván mới' : 'Bắt đầu ván'}</button>` : '<p>Đợi chủ ván bắt đầu.</p>';
+  h += `<details id="guide" ${guideOpen ? 'open' : ''}><summary>Xem tất cả thẻ vai trò</summary><div class="cards">${Object.keys(ROLE).map(r => `<div class="cardbox">${card(r)}<br>${DESC[r]}</div>`).join('')}</div></details>`;
   $('panel').innerHTML = h;
   if ($('start')) $('start').onclick = () => send({ t: 'start' });
   if ($('save')) $('save').onclick = () => send({ t: 'act', k: 'save' });
@@ -192,6 +220,60 @@ setInterval(() => {
   if (s !== null && s <= 5 && s > 0 && s !== lastTick) { lastTick = s; SFX.tick(); }
 }, 300);
 
+
+/* ---------- Thoại (WebRTC, signaling qua server) ---------- */
+const ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+const pcs = {}; let local = null, micOn = true;
+$('panel').addEventListener('toggle', e => { if (e.target.id === 'guide') guideOpen = e.target.open; }, true);
+function allow(q) {
+  const m = meP(); if (!q || !m) return false;
+  if (st.ph === 'lobby' || st.ph === 'over') return true;
+  if (!q.a) return !m.a;
+  if (st.ph === 'night') return !!m.a && m.r === 'wolf' && q.r === 'wolf';
+  return true;
+}
+function drop(id) { const x = pcs[id]; if (!x) return; try { x.pc.close(); } catch (e) {} if (x.au) { x.au.pause(); x.au.srcObject = null; } delete pcs[id]; }
+function peer(id) {
+  if (pcs[id]) return pcs[id];
+  const pc = new RTCPeerConnection(ICE), x = pcs[id] = { pc, au: null, q: Promise.resolve() };
+  local.getTracks().forEach(t => pc.addTrack(t, local));
+  pc.onicecandidate = e => e.candidate && s.emit('sig', { to: id, data: { c: e.candidate } });
+  pc.ontrack = e => { if (!x.au) { x.au = new Audio(); x.au.autoplay = true; } x.au.srcObject = e.streams[0]; filterAudio(); };
+  pc.onconnectionstatechange = () => { if (['failed', 'closed'].includes(pc.connectionState)) drop(id); };
+  return x;
+}
+function filterAudio() { Object.keys(pcs).forEach(id => { const x = pcs[id]; if (x.au) x.au.muted = !allow(st.P.find(p => p.i === id)); }); }
+async function call(id) { const { pc } = peer(id); const o = await pc.createOffer(); await pc.setLocalDescription(o); s.emit('sig', { to: id, data: { d: pc.localDescription } }); }
+function syncVoice() {
+  if (!st) return;
+  if (local) {
+    st.P.forEach(q => { if (q.i !== me && q.v && !pcs[q.i] && me < q.i) call(q.i); });
+    Object.keys(pcs).forEach(id => { const q = st.P.find(p => p.i === id); if (!q || !q.v) drop(id); });
+  }
+  filterAudio();
+}
+s.on('sig', ({ from, data }) => {
+  if (!local) return;
+  const x = peer(from);
+  x.q = x.q.then(async () => {
+    if (data.d) {
+      await x.pc.setRemoteDescription(data.d);
+      if (data.d.type === 'offer') { const a = await x.pc.createAnswer(); await x.pc.setLocalDescription(a); s.emit('sig', { to: from, data: { d: x.pc.localDescription } }); }
+    } else if (data.c) { try { await x.pc.addIceCandidate(data.c); } catch (e) {} }
+  }).catch(() => {});
+});
+function leaveVoice() {
+  local.getTracks().forEach(t => t.stop()); local = null; Object.keys(pcs).forEach(drop); s.emit('voice', false);
+  $('voice').textContent = '🎙 Tham gia thoại'; $('mm').classList.add('hidden');
+}
+$('voice').onclick = async () => {
+  if (local) return leaveVoice();
+  try { local = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
+  catch (e) { return alert('Không mở được micro. Hãy cho phép quyền micro cho trang này (cần kết nối https).'); }
+  micOn = true; $('mm').textContent = 'Mic: bật'; $('mm').classList.remove('hidden'); $('voice').textContent = '🎙 Rời thoại';
+  s.emit('voice', true); syncVoice();
+};
+$('mm').onclick = () => { micOn = !micOn; local.getTracks().forEach(t => t.enabled = micOn); $('mm').textContent = micOn ? 'Mic: bật' : 'Mic: tắt'; };
 </script>
 </body>
 </html>
