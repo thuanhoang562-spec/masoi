@@ -2,58 +2,83 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
+<meta name="theme-color" content="#07080f">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ma Sói Online</title>
-<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;800&amp;family=Playfair+Display:ital,wght@0,700;0,900;1,700&amp;display=swap" rel="stylesheet">
 <style>
-:root{color-scheme:dark;--bg:#12172b;--panel:#1b2240;--ink:#e8e4d4;--mute:#8a90ad;--wolf:#c23b4f;--moon:#e0b45a;--teal:#5fb3b0;--line:#2c3560;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+:root{color-scheme:dark;--bg:#07080f;--panel:#12101a;--panel2:#1b1622;--ink:#e6dfd0;--mute:#9a93a6;--blood:#b3202f;--wolf:#d03045;--moon:#e8a35a;--teal:#5fb3b0;--line:#40202b;--glow:#7a0f1c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 *{box-sizing:border-box}
-html,body{margin:0}
-body{background:var(--bg);color:var(--ink);font:16px/1.5 'Be Vietnam Pro',system-ui,sans-serif;transition:background .8s}
-body.day{--bg:#2d3354}
-.wrap{max-width:960px;margin:0 auto;padding:16px}
+html,body{margin:0;min-height:100%}
+body{background:radial-gradient(ellipse at 85% 0%,#2e0e16 0,transparent 55%),var(--bg);color:var(--ink);font:16px/1.55 'Be Vietnam Pro',system-ui,sans-serif;transition:background .9s,color .9s;position:relative;overflow-x:hidden}
+body.day{--bg:#25232f;--panel:#2e2b39;--panel2:#383541;--line:#51404a;--ink:#f1eadf;--mute:#b2abbc}
+body::before{content:'';position:fixed;inset:0;z-index:5;pointer-events:none;background:radial-gradient(ellipse at center,transparent 45%,#000b 100%)}
+body::after{content:'';position:fixed;inset:0;z-index:6;pointer-events:none;background:radial-gradient(ellipse at center,transparent 30%,#b00020 125%);opacity:0}
+body.hit::after{animation:hit 1.2s ease-out}
+@keyframes hit{0%{opacity:.95}100%{opacity:0}}
+#moon{position:fixed;z-index:0;top:5vh;right:7vw;width:clamp(80px,14vw,150px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ff8a5c 0,#c62a2a 45%,#6e0d17 100%);box-shadow:0 0 60px 20px #8a111d66,0 0 160px 60px #5a0a1255;transition:all 1.2s;animation:pulse 7s ease-in-out infinite}
+#moon::after{content:'';position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 60% 30%,#0004 0 8%,transparent 9%),radial-gradient(circle at 30% 65%,#0003 0 11%,transparent 12%),radial-gradient(circle at 70% 70%,#0003 0 6%,transparent 7%)}
+body.day #moon{background:radial-gradient(circle at 35% 35%,#fff5dc,#d8c7a0);box-shadow:0 0 50px 10px #fff2cc33;opacity:.5;animation:none}
+@keyframes pulse{50%{transform:scale(1.04)}}
+#fog{position:fixed;left:0;right:0;bottom:0;height:55vh;z-index:0;pointer-events:none;background:radial-gradient(ellipse 40% 50% at 20% 80%,#9aa0b824,transparent 70%),radial-gradient(ellipse 45% 45% at 70% 90%,#9aa0b81e,transparent 70%),radial-gradient(ellipse 35% 40% at 95% 70%,#9aa0b81a,transparent 70%);background-size:200% 100%;animation:fog 38s linear infinite alternate}
+@keyframes fog{from{background-position:0 0}to{background-position:100% 0}}
+#forest{position:fixed;left:0;right:0;bottom:0;height:120px;z-index:0;pointer-events:none;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 120'%3E%3Cpath fill='%23040408' d='M0 120V84l12-34 10 22 14-44 14 48 10-20 16 38 12-30 14 44 10-22 16 32 14-50 12 36 12-20 14 40 10-24 14 30 14-48 12 32 14-20 14 40 10-26 14 32 14-44 12 28 14-24 12 38 14-30 14 34 10-22 12 26V120z'/%3E%3C/svg%3E") repeat-x bottom/520px 120px}
+#eyes{position:fixed;z-index:0;left:9%;bottom:64px;width:36px;height:8px;pointer-events:none;opacity:0;transition:opacity 1.2s}
+#eyes::before,#eyes::after{content:'';position:absolute;top:0;width:12px;height:6px;border-radius:50%;background:#ffd23f;box-shadow:0 0 10px 3px #ffb300aa}
+#eyes::before{left:0;transform:rotate(-14deg)}#eyes::after{right:0;transform:rotate(14deg)}
+body:not(.day) #eyes{opacity:1;animation:blink 9s infinite}
+@keyframes blink{0%,40%,46%,100%{transform:scaleY(1)}43%{transform:scaleY(.05)}}
+.wrap{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:16px}
 .hidden{display:none!important}
-h1{font-size:2rem;font-weight:800;margin:.2em 0}
+h1{font:900 clamp(2.4rem,9vw,3.4rem)/1 'Playfair Display',Georgia,serif;letter-spacing:.1em;text-transform:uppercase;margin:0;color:var(--wolf);text-shadow:0 0 22px var(--glow),0 2px 0 #000;animation:flick 6s infinite}
+@keyframes flick{0%,92%,100%{opacity:1}93%{opacity:.5}95%{opacity:1}97%{opacity:.65}}
+.tag{margin:0 0 8px;color:var(--mute);font:italic 1.05rem 'Playfair Display',Georgia,serif}
 input,button{font:inherit;color:inherit}
-input{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:100%}
-button{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px;cursor:pointer}
-button:focus-visible,input:focus-visible{outline:2px solid var(--moon);outline-offset:2px}
-button.main{background:var(--wolf);border-color:var(--wolf);font-weight:600}
-#home{max-width:380px;margin:10vh auto 0;display:grid;gap:12px}
+input{background:#0b0910;border:1px solid var(--line);border-radius:4px;padding:10px 12px;width:100%}
+button{background:linear-gradient(#271b2b,#17111c);border:1px solid var(--line);border-radius:4px;padding:10px 14px;cursor:pointer;transition:box-shadow .2s,border-color .2s}
+button:not(:disabled):hover{border-color:var(--blood);box-shadow:0 0 14px #b3202f66}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--moon);outline-offset:2px}
+button.main{background:linear-gradient(#c02235,#7a111f);border-color:#d03045;font-weight:600;letter-spacing:.03em;text-shadow:0 1px 0 #0008}
+#home{max-width:400px;margin:9vh auto 0;display:grid;gap:12px;padding:26px 24px;background:linear-gradient(180deg,#170f1bdd,#0c0a12ee);border:1px solid var(--line);border-radius:6px;box-shadow:0 0 0 1px #000,0 0 60px #5a0a1240,0 20px 50px #000a;position:relative;overflow:hidden}
+#home::after{content:'';position:absolute;top:-12px;right:-8px;width:120px;height:120px;pointer-events:none;opacity:.55;background:linear-gradient(115deg,transparent 40%,#8f1527 41% 44%,transparent 45% 52%,#8f1527 53% 57%,transparent 58% 65%,#8f1527 66% 69%,transparent 70%)}
 #msg{color:var(--moon);min-height:1.5em;margin:0}
-header{flex-wrap:wrap;display:flex;align-items:center;gap:14px;padding-bottom:12px;border-bottom:1px solid var(--line)}
-#disc{width:42px;height:42px;border-radius:50%;box-shadow:inset -13px -4px 0 0 var(--moon);transition:all .8s}
-body.day #disc{background:var(--moon);box-shadow:0 0 0 6px #e0b45a33}
-header b{font-size:1.1rem}header span{color:var(--mute)}
-#timer{margin-left:auto;font-size:1.5rem;font-weight:800;font-variant-numeric:tabular-nums}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+header button{padding:6px 10px;font-size:.85rem}
+#disc{width:42px;height:42px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ff8a5c,#8a111d);box-shadow:0 0 18px #b3202f;transition:all .9s}
+body.day #disc{background:radial-gradient(circle at 35% 35%,#fff5dc,#d8c7a0);box-shadow:0 0 14px #fff2cc55}
+#ph{font:700 1.25rem 'Playfair Display',Georgia,serif;letter-spacing:.03em}
+header span{color:var(--mute)}
+#timer{margin-left:auto;font:900 1.7rem 'Playfair Display',Georgia,serif;color:var(--moon);font-variant-numeric:tabular-nums}
 main{display:grid;gap:16px;margin-top:16px}
 @media(min-width:760px){main{grid-template-columns:260px 1fr}}
 #players{display:grid;gap:6px;align-content:start}
-.p{display:flex;justify-content:space-between;text-align:left;width:100%}
+.p{display:flex;justify-content:space-between;text-align:left;width:100%;border-radius:4px 4px 12px 12px}
 .p small{color:var(--mute)}
 .p:disabled{cursor:default;opacity:1}
-.p.dead{opacity:.45;text-decoration:line-through}
-.p.sel{border-color:var(--moon);box-shadow:0 0 0 2px var(--moon)}
-.p:not(:disabled):hover{border-color:var(--moon)}
+.p.dead{opacity:.5;text-decoration:line-through;filter:grayscale(1)}
+.p.dead span::before{content:'✝ '}
+.p.sel{border-color:var(--moon);box-shadow:0 0 0 2px var(--moon),0 0 16px #e8a35a66}
 .r-wolf{color:var(--wolf)}.r-seer{color:var(--teal)}.r-witch{color:#b48be0}
-#panel{background:var(--panel);border-radius:10px;padding:14px;display:grid;gap:8px;justify-items:start}
+#panel,#log{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:6px;box-shadow:0 8px 30px #000a}
+#panel{padding:14px;display:grid;gap:8px;justify-items:start}
 #panel p{margin:0}
-#log{background:var(--panel);border-radius:10px;padding:12px;height:280px;overflow:auto;margin-top:12px}
+#log{padding:12px;height:280px;overflow:auto;margin-top:12px}
 #log p{margin:0 0 6px}
-.s{color:var(--moon)}.w b{color:var(--wolf)}.d{color:var(--mute)}
+.s{color:var(--moon);font:italic 1rem 'Playfair Display',Georgia,serif}.w b{color:var(--wolf)}.d{color:var(--mute)}
 #chat{display:flex;gap:8px;margin-top:8px}
-header button{padding:6px 10px;font-size:.85rem}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:12px;margin-top:10px}
 .cardbox{text-align:center;font-size:.78rem;color:var(--mute);line-height:1.35}
 details{width:100%}summary{cursor:pointer;color:var(--moon)}
-.mycard{line-height:0}
-@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+.mycard{line-height:0}.mycard svg,.cardbox svg{filter:drop-shadow(0 6px 14px #000c)}
+@media(prefers-reduced-motion:reduce){*,::before,::after{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
+<div id="moon"></div><div id="fog"></div><div id="forest"></div><div id="eyes"></div>
 <div class="wrap">
   <section id="home">
     <h1>Ma Sói</h1>
+    <p class="tag">Đêm nay, ai sẽ không thấy bình minh?</p>
     <input id="name" placeholder="Tên của bạn" maxlength="14" autocomplete="off">
     <button class="main" id="create">Tạo ván mới</button>
     <input id="code" placeholder="Mã ván (4 chữ cái)" maxlength="4" autocapitalize="characters">
@@ -193,7 +218,7 @@ s.on('state', x => {
   $('home').classList.add('hidden'); $('game').classList.remove('hidden'); $('room').textContent = 'Mã ván: ' + x.code;
   const key = x.ph + x.day;
   if (key !== lastKey) { lastKey = key; pick = []; if (SFX[x.ph]) SFX[x.ph](); if (x.ph === 'over') SFX.win(); }
-  const dead = x.P.filter(p => !p.a).length; if (old && dead > lastDead) SFX.death(); lastDead = dead;
+  const dead = x.P.filter(p => !p.a).length; if (old && dead > lastDead) { SFX.death(); document.body.classList.add('hit'); setTimeout(() => document.body.classList.remove('hit'), 1300); } lastDead = dead;
   render(); syncVoice(); applyMusic();
 });
 
