@@ -149,7 +149,7 @@ const snd = (f, d, ty = 'sine', to = f, v = .15, t0 = 0) => {
   } catch (e) {}
 };
 const SFX = {
-  night: () => { snd(300, 1.6, 'sawtooth', 640, .07); snd(640, 1.4, 'sawtooth', 360, .06, 1.5); },
+  night: () => { snd(300, 1.6, 'triangle', 640, .09); snd(640, 1.4, 'triangle', 360, .07, 1.5); },
   day: () => [784, 988, 1175, 1568].forEach((f, i) => snd(f, .7, 'triangle', f, .1, i * .16)),
   vote: () => { snd(90, .3, 'square', 45, .2); snd(90, .3, 'square', 45, .2, .45); },
   hunter: () => { snd(200, .25, 'sawtooth', 40, .25); },
@@ -163,34 +163,69 @@ $('mute').onclick = () => { mute = !mute; $('mute').textContent = mute ? '🔇' 
 /* ---------- Nhạc nền: sảnh chờ êm dịu, ban đêm rùng rợn, ban ngày im lặng ---------- */
 let mus = null, musMode = null;
 const actx = () => (ac = ac || new AudioContext());
+const hz = n => 440 * Math.pow(2, (n - 69) / 12);
+const MUS = {
+  // Đêm: cung La thứ, hợp âm chuyển chậm, vài nốt hộp nhạc thưa, gió thoảng và tiếng tim đập xa
+  night: { chords: [[45, 57, 60, 64], [41, 53, 57, 60], [38, 50, 53, 57], [40, 52, 56, 59]], scale: [69, 72, 74, 76, 79, 81], gain: .5, pad: 700, mel: .05, dark: true },
+  // Sảnh chờ: êm, sáng hơn, rất nhỏ
+  lobby: { chords: [[48, 55, 59, 64], [45, 52, 55, 60], [41, 48, 52, 57], [43, 50, 55, 59]], scale: [72, 74, 76, 79, 81, 84], gain: .28, pad: 1100, mel: .035, dark: false }
+};
 function stopMus() {
-  if (!mus) return; const m = mus; mus = null; clearTimeout(m.t);
-  m.g.gain.cancelScheduledValues(ac.currentTime); m.g.gain.setTargetAtTime(0, ac.currentTime, .35);
-  setTimeout(() => m.nodes.forEach(n => { try { n.stop(); } catch (e) {} }), 1800);
+  if (!mus) return; const m = mus; mus = null; [m.t, m.t2, m.t3].forEach(clearTimeout);
+  m.g.gain.cancelScheduledValues(ac.currentTime); m.g.gain.setTargetAtTime(0, ac.currentTime, .4);
+  setTimeout(() => { try { m.fb.gain.value = 0; m.bus.disconnect(); m.g.disconnect(); } catch (e) {} }, 2500);
 }
 function startMus(mode) {
-  const c = actx(); c.resume();
-  const g = c.createGain(), f = c.createBiquadFilter(), nodes = [], m = mus = { g, nodes, t: 0 };
-  g.gain.value = 0; g.connect(c.destination); f.type = 'lowpass'; f.connect(g);
-  const osc = (fr, ty, v) => { const o = c.createOscillator(), x = c.createGain(); o.type = ty; o.frequency.value = fr; x.gain.value = v; o.connect(x); x.connect(f); o.start(); nodes.push(o); };
-  const lfo = (rate, depth, param) => { const o = c.createOscillator(), x = c.createGain(); o.frequency.value = rate; x.gain.value = depth; o.connect(x); x.connect(param); o.start(); nodes.push(o); };
-  if (mode === 'night') {
-    f.frequency.value = 420;
-    osc(55, 'sawtooth', .5); osc(58.3, 'sawtooth', .5); osc(82.4, 'sine', .6); osc(116.5, 'sine', .25);
-    g.gain.setTargetAtTime(.2, c.currentTime, 1.5); lfo(.13, .07, g.gain); lfo(.05, 120, f.frequency);
-    const sting = () => {
-      if (mus !== m) return;
-      const k = Math.floor(Math.random() * 3);
-      if (k === 0) { snd(1500, 3, 'sine', 650, .035); snd(1590, 3, 'sine', 700, .03); }
-      else if (k === 1) { snd(62, .22, 'sine', 38, .35); snd(62, .22, 'sine', 38, .3, .3); }
-      else { snd(90, 2.2, 'sawtooth', 45, .05); snd(95, 2.2, 'square', 48, .02); }
-      m.t = setTimeout(sting, 5000 + Math.random() * 8000);
+  const c = actx(), cfg = MUS[mode]; c.resume();
+  const g = c.createGain(), bus = c.createGain(), dl = c.createDelay(1.5), fb = c.createGain(), lp = c.createBiquadFilter(), pf = c.createBiquadFilter();
+  const m = mus = { g, bus, fb, t: 0, t2: 0, t3: 0 };
+  g.gain.value = 0; g.connect(c.destination);
+  dl.delayTime.value = .6; fb.gain.value = .4; lp.type = 'lowpass'; lp.frequency.value = 1600;
+  bus.connect(g); bus.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(g);
+  pf.type = 'lowpass'; pf.frequency.value = cfg.pad; pf.connect(bus);
+  g.gain.setTargetAtTime(cfg.gain, c.currentTime, 2);
+  const note = (f, dur, ty, vol, dest, att) => {
+    const t = c.currentTime, o = c.createOscillator(), x = c.createGain();
+    o.type = ty; o.frequency.value = f; x.gain.setValueAtTime(0, t);
+    x.gain.linearRampToValueAtTime(vol, t + att); x.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    o.connect(x); x.connect(dest); o.start(t); o.stop(t + dur + .1);
+  };
+  let ci = 0, mi = 2;
+  const chord = () => {
+    if (mus !== m) return;
+    cfg.chords[ci++ % cfg.chords.length].forEach((n, k) => note(hz(n), 10, k ? 'triangle' : 'sine', k ? .05 : .09, pf, 2.6));
+    m.t = setTimeout(chord, 8000);
+  };
+  const mel = () => {
+    if (mus !== m) return;
+    if (Math.random() < .8) {
+      mi = Math.max(0, Math.min(cfg.scale.length - 1, mi + Math.floor(Math.random() * 5) - 2));
+      const f = hz(cfg.scale[mi]); note(f, 2.8, 'sine', cfg.mel, bus, .01); note(f * 2, 1.2, 'triangle', cfg.mel * .25, bus, .01);
+    }
+    m.t2 = setTimeout(mel, 1800 + Math.random() * 3400);
+  };
+  chord(); m.t2 = setTimeout(mel, 2500);
+  if (cfg.dark) {
+    const nb = c.createBuffer(1, c.sampleRate * 4, c.sampleRate), d = nb.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const beat = off => {
+      const t = c.currentTime + off, o = c.createOscillator(), x = c.createGain();
+      o.frequency.setValueAtTime(70, t); o.frequency.exponentialRampToValueAtTime(35, t + .25);
+      x.gain.setValueAtTime(.2, t); x.gain.exponentialRampToValueAtTime(.001, t + .3);
+      o.connect(x); x.connect(g); o.start(t); o.stop(t + .35);
     };
-    m.t = setTimeout(sting, 3000);
-  } else {
-    f.frequency.value = 1400;
-    [220, 261.6, 329.6, 440].forEach((fr, i) => osc(fr, 'sine', .2 - i * .03));
-    g.gain.setTargetAtTime(.07, c.currentTime, 2); lfo(.1, .02, g.gain);
+    const event = () => {
+      if (mus !== m) return;
+      if (Math.random() < .5) { beat(0); beat(.34); }
+      else {
+        const s = c.createBufferSource(), bp = c.createBiquadFilter(), x = c.createGain(), t = c.currentTime;
+        s.buffer = nb; bp.type = 'bandpass'; bp.Q.value = 2; bp.frequency.setValueAtTime(250, t); bp.frequency.linearRampToValueAtTime(650, t + 4);
+        x.gain.setValueAtTime(0, t); x.gain.linearRampToValueAtTime(.05, t + 2); x.gain.linearRampToValueAtTime(0, t + 4);
+        s.connect(bp); bp.connect(x); x.connect(bus); s.start(t); s.stop(t + 4.1);
+      }
+      m.t3 = setTimeout(event, 7000 + Math.random() * 9000);
+    };
+    m.t3 = setTimeout(event, 5000);
   }
 }
 function applyMusic() {
