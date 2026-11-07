@@ -44,6 +44,7 @@ button.main{background:linear-gradient(#c02235,#7a111f);border-color:#d03045;fon
 #msg{color:var(--moon);min-height:1.5em;margin:0}
 header{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line)}
 header button{padding:6px 10px;font-size:.85rem}
+#vol{width:84px;padding:0;background:transparent;border:0;accent-color:var(--blood)}
 #disc{width:42px;height:42px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ff8a5c,#8a111d);box-shadow:0 0 18px #b3202f;transition:all .9s}
 body.day #disc{background:radial-gradient(circle at 35% 35%,#fff5dc,#d8c7a0);box-shadow:0 0 14px #fff2cc55}
 #ph{font:700 1.25rem 'Playfair Display',Georgia,serif;letter-spacing:.03em}
@@ -58,7 +59,7 @@ main{display:grid;gap:16px;margin-top:16px}
 .p.dead{opacity:.5;text-decoration:line-through;filter:grayscale(1)}
 .p.dead span::before{content:'✝ '}
 .p.sel{border-color:var(--moon);box-shadow:0 0 0 2px var(--moon),0 0 16px #e8a35a66}
-.r-wolf{color:var(--wolf)}.r-seer{color:var(--teal)}.r-witch{color:#b48be0}
+.r-wolf,.r-cub{color:var(--wolf)}.r-seer{color:var(--teal)}.r-witch{color:#b48be0}.r-arsonist{color:#ff8a3d}.r-mute{color:#8da2bd}
 #panel,#log{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:6px;box-shadow:0 8px 30px #000a}
 #panel{padding:14px;display:grid;gap:8px;justify-items:start}
 #panel p{margin:0}
@@ -86,7 +87,7 @@ details{width:100%}summary{cursor:pointer;color:var(--moon)}
     <p id="msg"></p>
   </section>
   <section id="game" class="hidden">
-    <header><div id="disc"></div><div><b id="ph"></b><br><span id="room"></span></div><div id="timer"></div><button id="mute" aria-label="Bật hoặc tắt âm thanh">🔊</button><button id="voice">🎙 Tham gia thoại</button><button id="mm" class="hidden">Mic: bật</button></header>
+    <header><div id="disc"></div><div><b id="ph"></b><br><span id="room"></span></div><div id="timer"></div><button id="mute" aria-label="Bật hoặc tắt âm thanh">🔊</button><input id="vol" type="range" min="0" max="60" value="15" aria-label="Âm lượng nhạc" title="Âm lượng nhạc"><button id="voice">🎙 Tham gia thoại</button><button id="mm" class="hidden">Mic: bật</button></header>
     <main>
       <aside id="players"></aside>
       <div>
@@ -101,7 +102,8 @@ details{width:100%}summary{cursor:pointer;color:var(--moon)}
 <script>
 const $ = id => document.getElementById(id);
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const ROLE = { wolf: 'Sói', villager: 'Dân làng', seer: 'Tiên tri', guard: 'Bảo vệ', witch: 'Phù thủy', hunter: 'Thợ săn', cupid: 'Cupid' };
+const ROLE = { wolf: 'Sói', villager: 'Dân làng', seer: 'Tiên tri', guard: 'Bảo vệ', witch: 'Phù thủy', hunter: 'Thợ săn', cupid: 'Cupid', mute: 'Kẻ câm', arsonist: 'Kẻ phóng hỏa', cub: 'Sói con' };
+const isW = r => r === 'wolf' || r === 'cub';
 const PH = { lobby: 'Sảnh chờ', night: 'Đêm', day: 'Thảo luận', vote: 'Bỏ phiếu', hunter: 'Thợ săn nổ súng', over: 'Kết thúc' };
 const HINT = {
   wolf: 'Chọn một người để cả bầy cùng cắn. Bạn nhắn tin được với Sói khác.',
@@ -110,11 +112,14 @@ const HINT = {
   witch: 'Cứu nạn nhân bằng bình thuốc cứu, hoặc chọn một người để đầu độc. Mỗi bình dùng một lần.',
   hunter: 'Ngủ yên. Khi chết, bạn được bắn theo một người.',
   cupid: 'Đêm đầu: chọn hai người để ghép đôi. Một người chết, người kia chết theo.',
-  villager: 'Bạn ngủ say. Đợi trời sáng.'
+  villager: 'Bạn ngủ say. Đợi trời sáng.',
+  cub: 'Thuộc phe Sói, cùng bầy chọn nạn nhân. Nếu bạn chết, đêm sau Sói được cắn hai người.',
+  mute: 'Mỗi đêm chọn một người bị bịt miệng: ngày hôm sau họ không được nói (không chọn cùng người hai đêm liền).',
+  arsonist: 'Một mình một phe. Mỗi đêm tẩm xăng một người, hoặc châm lửa thiêu tất cả người đã tẩm. Thắng khi chỉ còn mình bạn.'
 };
 
 /* ---------- Thẻ vai trò (SVG) ---------- */
-const CLR = { wolf: ['#3a0b16', '#c23b4f'], villager: ['#2e2616', '#c4a45e'], seer: ['#0b2c33', '#5fb3b0'], guard: ['#14264a', '#6c8fd6'], witch: ['#27123f', '#b48be0'], hunter: ['#14301a', '#6fae6a'], cupid: ['#451630', '#f08fb4'] };
+const CLR = { wolf: ['#3a0b16', '#c23b4f'], villager: ['#2e2616', '#c4a45e'], seer: ['#0b2c33', '#5fb3b0'], guard: ['#14264a', '#6c8fd6'], witch: ['#27123f', '#b48be0'], hunter: ['#14301a', '#6fae6a'], cupid: ['#451630', '#f08fb4'], mute: ['#1b2430', '#8da2bd'], arsonist: ['#3a1704', '#ff8a3d'], cub: ['#3a0b16', '#e0707f'] };
 const ART = {
   wolf: '<path d="M30 70 L38 28 L56 50 L64 50 L82 28 L90 70 L76 108 L60 118 L44 108Z" fill="C"/><circle cx="48" cy="72" r="5" fill="#12172b"/><circle cx="72" cy="72" r="5" fill="#12172b"/><path d="M52 96 L60 104 L68 96Z" fill="#12172b"/>',
   villager: '<path d="M26 80 L60 44 L94 80Z" fill="C"/><rect x="36" y="80" width="48" height="34" fill="C" opacity=".75"/><rect x="53" y="92" width="14" height="22" fill="#12172b"/>',
@@ -124,11 +129,16 @@ const ART = {
   hunter: '<circle cx="60" cy="72" r="30" fill="none" stroke="C" stroke-width="5"/><circle cx="60" cy="72" r="6" fill="C"/><path d="M60 28 V48 M60 96 V116 M16 72 H36 M84 72 H104" stroke="C" stroke-width="5"/>',
   cupid: '<path d="M60 108 L30 76 Q22 56 40 50 Q54 48 60 62 Q66 48 80 50 Q98 56 90 76Z" fill="C"/><path d="M22 114 L98 38 M98 38 L84 40 M98 38 L96 52" stroke="#e8e4d4" stroke-width="4" fill="none"/>'
 };
+ART.mute = '<circle cx="60" cy="68" r="32" fill="none" stroke="C" stroke-width="5"/><circle cx="48" cy="60" r="4" fill="C"/><circle cx="72" cy="60" r="4" fill="C"/><path d="M42 86 H78" stroke="C" stroke-width="9"/><path d="M52 80 L68 92 M68 80 L52 92" stroke="#12172b" stroke-width="3"/>';
+ART.arsonist = '<path d="M60 28 Q86 56 82 86 Q80 112 60 116 Q40 112 38 86 Q36 66 52 56 Q52 70 60 74 Q68 54 60 28Z" fill="C"/><path d="M60 86 Q72 96 67 106 Q60 112 53 106 Q48 96 60 86Z" fill="#12172b" opacity=".45"/>';
+ART.cub = '<g transform="translate(18 34) scale(.74)">' + ART.wolf + '</g><circle cx="94" cy="40" r="7" fill="C"/><circle cx="26" cy="40" r="4" fill="C"/>';
 const DESC = {
   wolf: 'Mỗi đêm cùng bầy chọn một người để cắn.', villager: 'Không có kỹ năng. Dùng lý lẽ để tìm Sói.',
   seer: 'Mỗi đêm soi một người xem có phải Sói không.', guard: 'Mỗi đêm che chắn một người, không lặp hai đêm liền.',
   witch: 'Một bình cứu, một bình độc, mỗi bình dùng một lần.', hunter: 'Khi chết được bắn theo một người.',
-  cupid: 'Đêm đầu ghép đôi hai người. Một người chết, người kia chết theo.'
+  cupid: 'Đêm đầu ghép đôi hai người. Một người chết, người kia chết theo.',
+  cub: 'Thuộc phe Sói. Khi chết, đêm sau Sói cắn hai người.', mute: 'Mỗi đêm bịt miệng một người cho ngày hôm sau.',
+  arsonist: 'Phe riêng. Tẩm xăng dần rồi châm lửa thiêu tất cả.'
 };
 function card(r, big) {
   const [a, b] = CLR[r], w = big ? 150 : 100;
@@ -162,7 +172,7 @@ $('mute').onclick = () => { mute = !mute; $('mute').textContent = mute ? '🔇' 
 
 /* ---------- Nhạc nền: một bản nhạc cho sảnh chờ và ban đêm, ban ngày im lặng ---------- */
 const bgm = new Audio('/music.mp3'); bgm.loop = true; bgm.volume = 0; bgm.preload = 'auto';
-let fadeT;
+let fadeT, musVol = (Number(localStorage.vol ?? 15) || 0) / 100;
 function fadeTo(v, done) {
   clearInterval(fadeT);
   fadeT = setInterval(() => {
@@ -173,9 +183,11 @@ function fadeTo(v, done) {
 }
 function applyMusic() {
   const want = !mute && st && (st.ph === 'night' || st.ph === 'lobby');
-  if (want) { if (bgm.paused) bgm.play().catch(() => {}); fadeTo(.4); }
+  if (want) { if (bgm.paused) bgm.play().catch(() => {}); fadeTo(musVol); }
   else if (!bgm.paused) fadeTo(0, () => bgm.pause());
 }
+$('vol').value = Math.round(musVol * 100);
+$('vol').oninput = () => { musVol = $('vol').value / 100; localStorage.vol = $('vol').value; applyMusic(); };
 document.addEventListener('pointerdown', () => { if (ac && ac.state !== 'running') ac.resume(); applyMusic(); });
 
 
@@ -202,11 +214,13 @@ s.on('state', x => {
 
 /* ---------- Giao diện ---------- */
 const meP = () => st && st.P.find(p => p.i === me);
-const known = q => st.ph === 'over' || q.i === me || (meP() && meP().r === 'wolf' && q.r === 'wolf');
+const known = q => st.ph === 'over' || q.i === me || (meP() && isW(meP().r) && isW(q.r));
 function can(q) {
   const m = meP(); if (!m || !q.a) return false;
   if (st.ph === 'night' && m.a) {
-    if (m.r === 'wolf') return q.r !== 'wolf';
+    if (isW(m.r)) return !isW(q.r);
+    if (m.r === 'mute') return q.i !== me && q.i !== st.lm;
+    if (m.r === 'arsonist') return q.i !== me;
     if (m.r === 'seer') return q.i !== me;
     if (m.r === 'guard') return q.i !== st.lg;
     if (m.r === 'witch') return st.wi.p > 0;
@@ -222,7 +236,7 @@ function render() {
   document.body.classList.toggle('day', st.ph === 'day' || st.ph === 'vote');
   $('ph').textContent = PH[st.ph] + (st.day ? ` · ngày ${st.day}` : '');
   $('players').innerHTML = st.P.map(q => `<button class="p ${q.a ? '' : 'dead'} ${pick.includes(q.i) ? 'sel' : ''}" data-i="${q.i}" ${can(q) ? '' : 'disabled'}>
-    <span>${esc(q.n)}${q.i === me ? ' (bạn)' : ''}</span><small class="r-${known(q) ? q.r : ''}">${known(q) && q.r ? ROLE[q.r] : ''}</small></button>`).join('');
+    <span>${st.dz.includes(q.i) ? '🔥 ' : ''}${st.mu === q.i && st.ph === 'day' ? '🤐 ' : ''}${esc(q.n)}${q.i === me ? ' (bạn)' : ''}</span><small class="r-${known(q) ? q.r : ''}">${known(q) && q.r ? ROLE[q.r] : ''}</small></button>`).join('');
   let h = '';
   if (role) h += `<div class="mycard">${card(role, 1)}</div><p>Vai của bạn: <b class="r-${role}">${ROLE[role]}</b>${m.a ? '' : ' (đã chết, bạn vẫn xem được ván chơi)'}</p>`;
   if (st.ph === 'lobby') h += `<p>Đã có ${st.P.length} người. Cần 5 đến 12 người để bắt đầu.</p>`;
@@ -235,10 +249,12 @@ function render() {
       h += '<button id="skip">Không làm gì</button>';
     }
   }
-  if (st.ph === 'day') h += '<p>Bàn bạc xem ai là Sói. Đây là lúc được dùng mic. Sắp tới sẽ bỏ phiếu.</p>';
+  if (st.ph === 'night' && m && m.a && role === 'arsonist') h += `<p>Đã tẩm xăng: ${st.dz.length} người.</p><button id="ignite">🔥 Châm lửa thiêu tất cả</button><button id="skip">Không làm gì</button>`;
+  if (st.ph === 'day') h += '<p>Bàn bạc xem ai là Sói. Đây là lúc được dùng mic (2 phút 30 giây). Sắp tới sẽ bỏ phiếu.</p>';
+  if (st.ph === 'day' && st.mu === me) h += '<p class="r-wolf">Bạn bị bịt miệng hôm nay: không nói được bằng mic hay tin nhắn.</p>';
   if (st.ph === 'vote' && m && m.a) h += '<p>Chọn người bạn muốn treo cổ.</p>';
   if (st.ph === 'hunter') h += st.hp.includes(me) ? '<p>Bạn là Thợ săn đã ngã xuống. Chọn người để bắn!</p>' : '<p>Thợ săn đang nhắm súng...</p>';
-  if (st.ph === 'over') h += `<p><b>${st.win === 'wolf' ? 'Sói thắng' : 'Dân làng thắng'}</b></p>`;
+  if (st.ph === 'over') h += `<p><b>${st.win === 'wolf' ? 'Sói thắng' : st.win === 'arsonist' ? 'Kẻ phóng hỏa thắng' : 'Dân làng thắng'}</b></p>`;
   const mine = (st.seen || []); if (mine.length) h += `<p class="r-seer">${mine.map(esc).join('<br>')}</p>`;
   if (['lobby', 'over'].includes(st.ph)) h += isHost ? `<button class="main" id="start">${st.ph === 'over' ? 'Chơi ván mới' : 'Bắt đầu ván'}</button>` : '<p>Đợi chủ ván bắt đầu.</p>';
   h += `<details id="guide" ${guideOpen ? 'open' : ''}><summary>Xem tất cả thẻ vai trò</summary><div class="cards">${Object.keys(ROLE).map(r => `<div class="cardbox">${card(r)}<br>${DESC[r]}</div>`).join('')}</div></details>`;
@@ -246,21 +262,22 @@ function render() {
   if ($('start')) $('start').onclick = () => send({ t: 'start' });
   if ($('save')) $('save').onclick = () => send({ t: 'act', k: 'save' });
   if ($('skip')) $('skip').onclick = () => send({ t: 'act', k: 'skip' });
+  if ($('ignite')) $('ignite').onclick = () => send({ t: 'act', k: 'ignite' });
   const log = $('log'), bottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 30;
-  log.innerHTML = st.log.filter(e => e.c !== 'w' || (role === 'wolf') || st.ph === 'over').filter(e => e.c !== 'd' || (m && !m.a) || st.ph === 'over')
+  log.innerHTML = st.log.filter(e => e.c !== 'w' || isW(role) || st.ph === 'over').filter(e => e.c !== 'd' || (m && !m.a) || st.ph === 'over')
     .map(e => e.c === 's' ? `<p class="s">${esc(e.t)}</p>` : `<p class="${e.c}"><b>${e.c === 'w' ? '[Sói] ' : e.c === 'd' ? '[Người chết] ' : ''}${esc(e.f)}:</b> ${esc(e.t)}</p>`).join('');
   if (bottom) log.scrollTop = log.scrollHeight;
 }
 $('players').onclick = e => {
   const b = e.target.closest('button'); if (!b || b.disabled) return;
   const i = b.dataset.i, r = meP().r; SFX.pick();
-  pick = (st.ph === 'night' && r === 'cupid') ? [...pick, i].slice(-2) : [i]; render();
-  send({ t: 'act', k: st.ph === 'night' && r === 'witch' ? 'poison' : 'pick', x: i });
+  pick = (st.ph === 'night' && (r === 'cupid' || (isW(r) && st.dbl))) ? [...pick.filter(v => v !== i), i].slice(-2) : [i]; render();
+  send({ t: 'act', k: st.ph === 'night' && r === 'witch' ? 'poison' : st.ph === 'night' && r === 'arsonist' ? 'douse' : 'pick', x: i });
 };
 $('chat').onsubmit = e => { e.preventDefault(); const t = $('text').value.trim(); if (t) send({ t: 'chat', x: t }); $('text').value = ''; };
 setInterval(() => {
   const s = st && end && !['lobby', 'over'].includes(st.ph) ? Math.max(0, Math.ceil((end - Date.now()) / 1000)) : null;
-  $('timer').textContent = s === null ? '' : s + 's';
+  $('timer').textContent = s === null ? '' : (s >= 60 ? Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') : s + 's');
   if (s !== null && s <= 5 && s > 0 && s !== lastTick) { lastTick = s; SFX.tick(); }
 }, 300);
 
@@ -273,9 +290,9 @@ $('panel').addEventListener('toggle', e => { if (e.target.id === 'guide') guideO
 function allow(q) {
   if (!q || !st) return false;
   if (st.ph === 'lobby') return true;
-  return st.ph === 'day' && !!q.a;
+  return st.ph === 'day' && !!q.a && q.i !== st.mu;
 }
-function canSpeak() { const m = meP(); return !!m && (st.ph === 'lobby' || (st.ph === 'day' && !!m.a)); }
+function canSpeak() { const m = meP(); return !!m && (st.ph === 'lobby' || (st.ph === 'day' && !!m.a && st.mu !== me)); }
 function applyMic() {
   if (!local) return;
   const ok = canSpeak();
