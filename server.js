@@ -38,13 +38,20 @@ function go(r, ph) {
   if (T[ph]) r.tm = setTimeout(() => nxt(r), T[ph] * 1000);
   bc(r);
 }
+const VN = { wolf: 'Sói', seer: 'Tiên tri', guard: 'Bảo vệ', witch: 'Phù thủy', hunter: 'Thợ săn', cupid: 'Cupid', villager: 'Dân làng' };
+// Bộ vai cố định theo số người: 5 người có Tiên tri, 6 thêm Bảo vệ, 7 thêm Phù thủy, 8 thêm Thợ săn, 9 thêm Cupid.
+function compose(n) {
+  const w = n <= 6 ? 1 : n <= 9 ? 2 : 3;
+  const sp = ['seer', 'guard', 'witch', 'hunter', 'cupid'].filter((_, i) => n >= 5 + i);
+  return [...Array(w).fill('wolf'), ...sp, ...Array(n - w - sp.length).fill('villager')];
+}
 function begin(r) {
-  const n = r.P.length, w = Math.max(1, Math.floor(n / 4));
-  const pool = ['seer', ...shuffle(['guard', 'witch', 'hunter', 'cupid'])].slice(0, n - w - 1);
-  const roles = shuffle([...Array(w).fill('wolf'), ...pool, ...Array(n - w - pool.length).fill('villager')]);
+  const n = r.P.length, comp = compose(n);
+  const roles = shuffle([...comp]);
   r.P.forEach((p, i) => { p.r = roles[i]; p.a = true; p.love = null; p.seen = []; });
   Object.assign(r, { day: 0, log: [], wi: { h: 1, p: 1 }, lg: null, H: [], win: null });
-  say(r, `Ván mới: ${n} người, ${w} Sói. Vai trò được chia ngẫu nhiên.`); night(r);
+  const cnt = {}; comp.forEach(x => cnt[x] = (cnt[x] || 0) + 1);
+  say(r, `Ván mới ${n} người: ${Object.entries(cnt).map(([k, v]) => v + ' ' + VN[k]).join(', ')}. Vai được chia ngẫu nhiên cho từng người.`); night(r);
 }
 function night(r) { r.day++; say(r, `Đêm ${r.day}: các vai đặc biệt hành động.`); go(r, 'night'); }
 function kill(r, p, why) {
