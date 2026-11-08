@@ -154,7 +154,7 @@ const crypto = require('crypto');
 app.use(express.json());
 const GID = process.env.GOOGLE_CLIENT_ID || '', SEC = process.env.SESSION_SECRET || crypto.randomBytes(24).toString('hex');
 const RU = process.env.UPSTASH_REDIS_REST_URL, RT = process.env.UPSTASH_REDIS_REST_TOKEN;
-const RSIZE = Math.max(5, Math.min(15, +process.env.RANKED_SIZE || 8));
+const RSIZE = Math.max(5, Math.min(15, +process.env.RANKED_SIZE || 9));
 const rankedOn = () => !!(GID && RU && RT);
 async function rcmd(...c) {
   const res = await fetch(RU, { method: 'POST', headers: { Authorization: 'Bearer ' + RT, 'Content-Type': 'application/json' }, body: JSON.stringify(c.map(String)) });
