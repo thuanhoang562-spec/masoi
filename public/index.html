@@ -3,6 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="theme-color" content="#07080f">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ma Sói">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ma Sói Online</title>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;800&amp;family=Playfair+Display:ital,wght@0,700;0,900;1,700&amp;display=swap" rel="stylesheet">
@@ -71,6 +77,13 @@ main{display:grid;gap:16px;margin-top:16px}
 .cardbox{text-align:center;font-size:.78rem;color:var(--mute);line-height:1.35}
 details{width:100%}summary{cursor:pointer;color:var(--moon)}
 .mycard{line-height:0}.mycard svg,.cardbox svg{filter:drop-shadow(0 6px 14px #000c)}
+#acct{display:grid;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+#gbtn{display:flex;justify-content:center}
+#prof{display:flex;gap:12px;align-items:center}#prof span{color:var(--mute);font-size:.9rem}
+#queue{text-align:center;display:grid;gap:8px;background:#0b0910;border:1px solid var(--blood);border-radius:6px;padding:12px}
+#queue p{margin:0}
+#lbbox{max-height:230px;overflow:auto;background:#0b0910;border:1px solid var(--line);border-radius:6px;padding:10px}
+#lbbox p{margin:0 0 4px;font-size:.92rem}
 @media(prefers-reduced-motion:reduce){*,::before,::after{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -80,10 +93,21 @@ details{width:100%}summary{cursor:pointer;color:var(--moon)}
   <section id="home">
     <h1>Ma Sói</h1>
     <p class="tag">Đêm nay, ai sẽ không thấy bình minh?</p>
+    <div id="acct" class="hidden">
+      <div id="gbtn"></div>
+      <div id="prof" class="hidden"><div id="badge"></div><div><b id="pname"></b><br><span id="pstat"></span></div></div>
+      <button class="main hidden" id="rank">⚔ Xếp hạng: tìm trận</button>
+      <div id="queue" class="hidden"><p id="qtxt">Đang tìm trận...</p><button id="qcancel">Hủy tìm trận</button></div>
+      <button id="lbbtn">🏆 Bảng xếp hạng</button>
+      <section id="lbbox" class="hidden"></section>
+      <button id="logout" class="hidden">Đăng xuất</button>
+    </div>
     <input id="name" placeholder="Tên của bạn" maxlength="14" autocomplete="off">
     <button class="main" id="create">Tạo ván mới</button>
     <input id="code" placeholder="Mã ván (4 chữ cái)" maxlength="4" autocapitalize="characters">
     <button id="join">Vào ván</button>
+    <button id="install" class="hidden">📲 Cài app lên điện thoại</button>
+    <p class="tag hidden" id="ioshint">Trên iPhone: bấm nút Chia sẻ trong Safari, rồi chọn “Thêm vào MH chính”.</p>
     <p id="msg"></p>
   </section>
   <section id="game" class="hidden">
@@ -200,12 +224,12 @@ const nm = () => { const n = $('name').value.trim(); localStorage.name = n; retu
 $('name').value = localStorage.name || '';
 $('create').onclick = () => { const n = nm(); n ? s.emit('create', { name: n, token: tok }) : say('Hãy nhập tên.'); };
 $('join').onclick = () => s.emit('join', { code: $('code').value.trim(), name: nm(), token: tok });
-s.on('connect', () => { if (localStorage.room) s.emit('join', { code: localStorage.room, name: localStorage.name, token: tok }); });
+s.on('connect', () => { if (localStorage.auth) s.emit('auth', localStorage.auth); if (localStorage.room) s.emit('join', { code: localStorage.room, name: localStorage.name, token: tok }); });
 s.on('err', m => { say(m); if (m.includes('phòng')) localStorage.removeItem('room'); });
 const send = d => d.t === 'chat' ? s.emit('chat', d.x) : d.t === 'start' ? s.emit('start') : s.emit('act', d);
 s.on('state', x => {
   const old = st; st = x; me = x.me; isHost = x.host; end = Date.now() + x.left; localStorage.room = x.code;
-  $('home').classList.add('hidden'); $('game').classList.remove('hidden'); $('room').textContent = 'Mã ván: ' + x.code;
+  $('home').classList.add('hidden'); $('game').classList.remove('hidden'); $('room').textContent = x.rk ? 'Trận xếp hạng' : 'Mã ván: ' + x.code;
   const key = x.ph + x.day;
   if (key !== lastKey) { lastKey = key; pick = []; if (SFX[x.ph]) SFX[x.ph](); if (x.ph === 'over') SFX.win(); }
   const dead = x.P.filter(p => !p.a).length; if (old && dead > lastDead) { SFX.death(); document.body.classList.add('hit'); setTimeout(() => document.body.classList.remove('hit'), 1300); } lastDead = dead;
@@ -256,13 +280,14 @@ function render() {
   if (st.ph === 'hunter') h += st.hp.includes(me) ? '<p>Bạn là Thợ săn đã ngã xuống. Chọn người để bắn!</p>' : '<p>Thợ săn đang nhắm súng...</p>';
   if (st.ph === 'over') h += `<p><b>${st.win === 'wolf' ? 'Sói thắng' : st.win === 'arsonist' ? 'Kẻ phóng hỏa thắng' : 'Dân làng thắng'}</b></p>`;
   const mine = (st.seen || []); if (mine.length) h += `<p class="r-seer">${mine.map(esc).join('<br>')}</p>`;
-  if (['lobby', 'over'].includes(st.ph)) h += isHost ? `<button class="main" id="start">${st.ph === 'over' ? 'Chơi ván mới' : 'Bắt đầu ván'}</button>` : '<p>Đợi chủ ván bắt đầu.</p>';
+  if (st.rk && st.ph === 'over') h += rankedResult(); else if (['lobby', 'over'].includes(st.ph)) h += isHost ? `<button class="main" id="start">${st.ph === 'over' ? 'Chơi ván mới' : 'Bắt đầu ván'}</button>` : '<p>Đợi chủ ván bắt đầu.</p>';
   h += `<details id="guide" ${guideOpen ? 'open' : ''}><summary>Xem tất cả thẻ vai trò</summary><div class="cards">${Object.keys(ROLE).map(r => `<div class="cardbox">${card(r)}<br>${DESC[r]}</div>`).join('')}</div></details>`;
   $('panel').innerHTML = h;
   if ($('start')) $('start').onclick = () => send({ t: 'start' });
   if ($('save')) $('save').onclick = () => send({ t: 'act', k: 'save' });
   if ($('skip')) $('skip').onclick = () => send({ t: 'act', k: 'skip' });
   if ($('ignite')) $('ignite').onclick = () => send({ t: 'act', k: 'ignite' });
+  if ($('home2')) $('home2').onclick = () => { localStorage.removeItem('room'); location.reload(); };
   const log = $('log'), bottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 30;
   log.innerHTML = st.log.filter(e => e.c !== 'w' || isW(role) || st.ph === 'over').filter(e => e.c !== 'd' || (m && !m.a) || st.ph === 'over')
     .map(e => e.c === 's' ? `<p class="s">${esc(e.t)}</p>` : `<p class="${e.c}"><b>${e.c === 'w' ? '[Sói] ' : e.c === 'd' ? '[Người chết] ' : ''}${esc(e.f)}:</b> ${esc(e.t)}</p>`).join('');
@@ -341,6 +366,64 @@ $('voice').onclick = async () => {
   s.emit('voice', true); syncVoice(); applyMic();
 };
 $('mm').onclick = () => { micOn = !micOn; applyMic(); };
+/* ---------- Tài khoản và xếp hạng ---------- */
+const TIER = ['Sắt', 'Đồng', 'Bạc', 'Vàng', 'Bạch Kim', 'Kim Cương'], TC = ['#7a7f87', '#b0703c', '#c3c9d4', '#e0b45a', '#5fd0c8', '#6aa8ff'], DIV = ['IV', 'III', 'II', 'I'];
+function tier(p) {
+  if (p >= 2800) return { n: 'Thách Đấu', c: '#ff4d6a', d: '', lp: p - 2800 };
+  if (p >= 2400) return { n: 'Cao Thủ', c: '#b36bff', d: '', lp: p - 2400 };
+  const i = Math.floor(p / 400); return { n: TIER[i], c: TC[i], d: DIV[Math.floor((p % 400) / 100)], lp: p % 100 };
+}
+const rankTxt = p => { const t = tier(p); return `${t.n}${t.d ? ' ' + t.d : ''} · ${t.lp} LP`; };
+function badge(p, sz = 46) {
+  const t = tier(p);
+  return `<svg viewBox="0 0 48 56" width="${sz}" role="img" aria-label="${t.n}"><path d="M24 2 L44 10 V28 Q44 46 24 54 Q4 46 4 28 V10Z" fill="#0b0910" stroke="${t.c}" stroke-width="3"/><path d="M24 10 L36 15 V28 Q36 40 24 46 Q12 40 12 28 V15Z" fill="${t.c}" opacity=".85"/><text x="24" y="33" text-anchor="middle" font-size="14" font-weight="800" fill="#0b0910" font-family="Be Vietnam Pro,sans-serif">${t.d || '★'}</text></svg>`;
+}
+function rankedResult() {
+  const r = st.res;
+  const t = !r ? 'Đang tính điểm...' : `${r.quit ? 'Bỏ trận: ' : r.won ? 'Thắng: ' : 'Thua: '}${r.d > 0 ? '+' : ''}${r.d} điểm → ${rankTxt(r.pts)}`;
+  return `<p><b>${t}</b></p><button id="home2">Về sảnh chính</button>`;
+}
+let cfg = null, gotRes = false;
+function showMe(u) {
+  const on = !!u;
+  $('gbtn').classList.toggle('hidden', on); $('prof').classList.toggle('hidden', !on);
+  $('rank').classList.toggle('hidden', !on); $('logout').classList.toggle('hidden', !on);
+  if (on) { $('badge').innerHTML = badge(u.pts); $('pname').textContent = u.name; $('pstat').textContent = `${rankTxt(u.pts)} · ${u.w} thắng, ${u.l} thua`; }
+}
+async function onCred(r) {
+  try {
+    const j = await (await fetch('/auth/google', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential: r.credential }) })).json();
+    if (j.token) { localStorage.auth = j.token; showMe(j.user); s.emit('auth', j.token); } else say('Đăng nhập thất bại.');
+  } catch (e) { say('Đăng nhập thất bại.'); }
+}
+fetch('/config').then(r => r.json()).then(c => {
+  cfg = c; if (!c.ranked) return; $('acct').classList.remove('hidden');
+  const sc = document.createElement('script'); sc.src = 'https://accounts.google.com/gsi/client'; sc.async = true;
+  sc.onload = () => { google.accounts.id.initialize({ client_id: c.gid, callback: onCred }); google.accounts.id.renderButton($('gbtn'), { theme: 'filled_black', size: 'large', text: 'signin_with', locale: 'vi' }); };
+  document.head.appendChild(sc);
+  if (localStorage.auth) s.emit('auth', localStorage.auth);
+}).catch(() => {});
+s.on('me', showMe);
+s.on('authfail', () => { localStorage.removeItem('auth'); showMe(null); });
+s.on('qs', on => $('queue').classList.toggle('hidden', !on));
+s.on('qn', x => { $('qtxt').textContent = `Đang tìm trận... ${x.n}/${x.need} người trong hàng chờ`; });
+s.on('state', x => { if (x.rk && x.ph === 'over' && x.res && !gotRes) { gotRes = true; if (localStorage.auth) s.emit('auth', localStorage.auth); } });
+$('rank').onclick = () => { $('qtxt').textContent = 'Đang tìm trận...'; s.emit('rq', tok); };
+$('qcancel').onclick = () => s.emit('rqx');
+$('logout').onclick = () => { localStorage.removeItem('auth'); showMe(null); location.reload(); };
+$('lbbtn').onclick = async () => {
+  const b = $('lbbox'); b.classList.toggle('hidden'); if (b.classList.contains('hidden')) return;
+  b.innerHTML = '<p>Đang tải...</p>';
+  try { const l = await (await fetch('/leaderboard')).json(); b.innerHTML = l.length ? l.map((u, i) => `<p>${i + 1}. <b>${esc(u.name)}</b> · ${rankTxt(u.pts)}</p>`).join('') : '<p>Chưa có ai trên bảng.</p>'; } catch (e) { b.innerHTML = '<p>Không tải được bảng xếp hạng.</p>'; }
+};
+
+/* ---------- Cài như app (PWA) ---------- */
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+let installEv = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEv = e; $('install').classList.remove('hidden'); });
+$('install').onclick = async () => { if (!installEv) return; installEv.prompt(); await installEv.userChoice; installEv = null; $('install').classList.add('hidden'); };
+window.addEventListener('appinstalled', () => $('install').classList.add('hidden'));
+if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !navigator.standalone) $('ioshint').classList.remove('hidden');
 </script>
 </body>
 </html>
