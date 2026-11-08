@@ -29,7 +29,7 @@ function view(r, p) {
     P: r.P.map(q => ({ i: q.i, n: q.n, a: q.a ? 1 : 0, v: q.voice ? 1 : 0, r: over || q === p || (wolf && isW(q)) ? q.r : '' })),
     log: r.log.filter(e => over || e.c === 's' || e.c === 'c' || (e.c === 'w' && wolf) || (e.c === 'd' && !p.a)).slice(-60),
     seen: p.seen, wi: witch ? r.wi : { h: 0, p: 0 }, lg: p.r === 'guard' ? r.lg : null,
-    mu: r.muted, dbl: r.double ? 1 : 0, dz: p.r === 'arsonist' ? p.doused : [], lm: p.r === 'mute' ? r.lastMute : null,
+    rk: r.ranked ? 1 : 0, res: p.res || null, mu: r.muted, dbl: r.double ? 1 : 0, dz: p.r === 'arsonist' ? p.doused : [], lm: p.r === 'mute' ? r.lastMute : null,
     hp: r.H.map(h => h.i), wv: witch ? lead(wolfTally(r)) : null
   };
 }
@@ -72,6 +72,7 @@ function over(r) {
   else if (!ar && w >= al.length - w) win = 'wolf';
   if (!win) return false;
   r.win = win; clearTimeout(r.tm); r.ph = 'over'; r.dl = 0;
+  if (r.ranked && !r.settled) { r.settled = true; settle(r); }
   say(r, win === 'village' ? 'Dân làng thắng! Toàn bộ Sói đã bị loại.' : win === 'wolf' ? 'Sói thắng! Sói đã chiếm đa số trong làng.' : 'Kẻ phóng hỏa thắng! Cả làng chìm trong biển lửa.'); bc(r); return true;
 }
 function proceed(r, ph) {
@@ -148,10 +149,90 @@ function act(r, p, d) {
   done(r) ? nxt(r) : bc(r);
 }
 
+/* ================= Tài khoản, xếp hạng, ghép trận ================= */
+const crypto = require('crypto');
+app.use(express.json());
+const GID = process.env.GOOGLE_CLIENT_ID || '', SEC = process.env.SESSION_SECRET || crypto.randomBytes(24).toString('hex');
+const RU = process.env.UPSTASH_REDIS_REST_URL, RT = process.env.UPSTASH_REDIS_REST_TOKEN;
+const RSIZE = Math.max(5, Math.min(15, +process.env.RANKED_SIZE || 8));
+const rankedOn = () => !!(GID && RU && RT);
+async function rcmd(...c) {
+  const res = await fetch(RU, { method: 'POST', headers: { Authorization: 'Bearer ' + RT, 'Content-Type': 'application/json' }, body: JSON.stringify(c.map(String)) });
+  const j = await res.json(); if (j.error) throw new Error(j.error); return j.result;
+}
+const getUser = async id => { const j = await rcmd('GET', 'u:' + id); return j ? JSON.parse(j) : null; };
+const putUser = async u => { await rcmd('SET', 'u:' + u.id, JSON.stringify(u)); await rcmd('ZADD', 'lb', u.pts, u.id); };
+const pub = u => ({ name: u.name, pts: u.pts, w: u.w, l: u.l });
+const b64 = x => Buffer.from(x).toString('base64url');
+const sign = o => { const p = b64(JSON.stringify({ ...o, exp: Date.now() + 30 * 864e5 })); return p + '.' + crypto.createHmac('sha256', SEC).update(p).digest('base64url'); };
+function verify(t) {
+  try {
+    const [p, m] = String(t).split('.'); if (!p || !m) return null;
+    const ok = crypto.createHmac('sha256', SEC).update(p).digest('base64url');
+    if (ok.length !== m.length || !crypto.timingSafeEqual(Buffer.from(ok), Buffer.from(m))) return null;
+    const o = JSON.parse(Buffer.from(p, 'base64url').toString()); return o.exp > Date.now() ? o.id : null;
+  } catch (e) { return null; }
+}
+app.get('/config', (q, s) => s.json({ gid: GID, ranked: rankedOn(), size: RSIZE }));
+app.post('/auth/google', async (q, s) => {
+  try {
+    if (!rankedOn()) return s.status(503).json({ error: 'off' });
+    const t = await (await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent((q.body && q.body.credential) || ''))).json();
+    if (t.aud !== GID || !t.sub) return s.status(401).json({ error: 'bad' });
+    let u = await getUser(t.sub);
+    if (!u) { u = { id: t.sub, name: clean(t.given_name || t.name || 'Người chơi') || 'Người chơi', pts: 0, w: 0, l: 0 }; await putUser(u); }
+    s.json({ token: sign({ id: u.id }), user: pub(u) });
+  } catch (e) { s.status(500).json({ error: 'fail' }); }
+});
+app.get('/leaderboard', async (q, s) => {
+  try {
+    const z = await rcmd('ZREVRANGE', 'lb', 0, 19), us = z.length ? await rcmd('MGET', ...z.map(i => 'u:' + i)) : [];
+    s.json(us.filter(Boolean).map(x => pub(JSON.parse(x))));
+  } catch (e) { s.json([]); }
+});
+
+// Điểm: thắng +25 (+5 nếu còn sống), thua -18, bỏ trận -30. Sắt→Kim Cương mỗi bậc 400 điểm, Cao Thủ từ 2400, Thách Đấu từ 2800.
+const queue = [];
+const leaveQ = id => { const i = queue.findIndex(q => q.sid === id); if (i >= 0) queue.splice(i, 1); };
+const mkPlayer = (n, tok) => ({ i: uid(), n, tok, sid: null, a: true, r: '', love: null, seen: [], voice: false, doused: [] });
+function makeMatch(grp) {
+  const r = newRoom(); r.ranked = true; rooms.set(r.code, r);
+  grp.forEach(g => {
+    let nm = g.name, k = 2; while (r.P.some(p => p.n === nm)) nm = g.name.slice(0, 12) + k++;
+    const p = mkPlayer(nm, g.token); p.uid = g.uid; r.P.push(p);
+    const so = io.sockets.sockets.get(g.sid);
+    if (so) { so.data = { ...so.data, room: r.code, pid: p.i }; p.sid = g.sid; io.to(g.sid).emit('qs', false); }
+  });
+  begin(r);
+}
+function matchmake() {
+  while (queue.length >= RSIZE) {
+    queue.sort((a, b) => a.since - b.since);
+    const a = queue[0], win = 300 + (Date.now() - a.since) / 100;
+    const grp = queue.slice().sort((x, y) => Math.abs(x.pts - a.pts) - Math.abs(y.pts - a.pts)).slice(0, RSIZE);
+    if (Math.abs(grp[RSIZE - 1].pts - a.pts) > win) break;
+    grp.forEach(g => queue.splice(queue.indexOf(g), 1)); makeMatch(grp);
+  }
+}
+setInterval(() => { matchmake(); queue.forEach(q => io.to(q.sid).emit('qn', { n: queue.length, need: RSIZE })); }, 2500);
+async function settle(r) {
+  const team = p => isW(p) ? 'wolf' : p.r === 'arsonist' ? 'arsonist' : 'village';
+  for (const p of r.P) {
+    if (!p.uid) continue;
+    try {
+      const u = await getUser(p.uid); if (!u) continue;
+      const quit = !p.sid, won = !quit && team(p) === r.win, old = u.pts;
+      u.pts = Math.max(0, u.pts + (quit ? -30 : won ? 25 + (p.a ? 5 : 0) : -18)); won ? u.w++ : u.l++;
+      await putUser(u); p.res = { d: u.pts - old, pts: u.pts, won, quit };
+    } catch (e) {}
+  }
+  bc(r);
+}
+
 io.on('connection', s => {
   const ctx = () => { const r = rooms.get(s.data.room), p = r && gp(r, s.data.pid); return r && p ? [r, p] : []; };
   const err = m => s.emit('err', m);
-  const enter = (r, p) => { p.sid = s.id; s.data = { room: r.code, pid: p.i }; bc(r); };
+  const enter = (r, p) => { p.sid = s.id; s.data = { ...s.data, room: r.code, pid: p.i }; bc(r); };
   const mk = (n, tok) => ({ i: uid(), n, tok, sid: null, a: true, r: '', love: null, seen: [], voice: false, doused: [] });
 
   s.on('create', ({ name, token }) => {
@@ -172,10 +253,21 @@ io.on('connection', s => {
     enter(r, p);
   });
   s.on('start', () => {
-    const [r, p] = ctx(); if (!r || r.P[0] !== p || !['lobby', 'over'].includes(r.ph)) return;
+    const [r, p] = ctx(); if (!r || r.ranked || r.P[0] !== p || !['lobby', 'over'].includes(r.ph)) return;
     if (r.P.length < 5) return err('Cần ít nhất 5 người.');
     begin(r);
   });
+  s.on('auth', async tok => {
+    const id = verify(tok); if (!id || !rankedOn()) return s.emit('authfail');
+    try { const u = await getUser(id); if (!u) return s.emit('authfail'); s.data = { ...s.data, user: { id: u.id, name: u.name } }; s.emit('me', pub(u)); } catch (e) { s.emit('authfail'); }
+  });
+  s.on('rq', async token => {
+    const u = s.data.user; if (!u) return err('Hãy đăng nhập để chơi xếp hạng.');
+    if (queue.some(q => q.uid === u.id)) return;
+    for (const r of rooms.values()) if (r.ranked && r.ph !== 'over' && r.P.some(p => p.uid === u.id && p.sid)) return err('Bạn đang trong một trận xếp hạng.');
+    try { const rec = await getUser(u.id); queue.push({ sid: s.id, uid: u.id, name: u.name, pts: rec ? rec.pts : 0, since: Date.now(), token: String(token || uid()) }); s.emit('qs', true); matchmake(); } catch (e) { err('Không vào được hàng chờ, thử lại sau.'); }
+  });
+  s.on('rqx', () => { leaveQ(s.id); s.emit('qs', false); });
   s.on('voice', on => { const [r, p] = ctx(); if (!r) return; p.voice = !!on; bc(r); });
   s.on('sig', ({ to, data } = {}) => { const [r, p] = ctx(); if (!r) return; const t = gp(r, to); if (t && t.sid) io.to(t.sid).emit('sig', { from: p.i, data }); });
   s.on('act', d => { const [r, p] = ctx(); if (r && d) act(r, p, d); });
@@ -189,6 +281,7 @@ io.on('connection', s => {
     r.log.push({ c, f: p.n, t: text }); bc(r);
   });
   s.on('disconnect', () => {
+    leaveQ(s.id);
     const [r, p] = ctx(); if (!r || p.sid !== s.id) return; p.sid = null; p.voice = false;
     if (r.ph === 'lobby') r.P = r.P.filter(x => x !== p);
     if (r.P.every(x => !x.sid)) { clearTimeout(r.tm); rooms.delete(r.code); } else bc(r);
