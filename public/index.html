@@ -106,8 +106,8 @@ details{width:100%}summary{cursor:pointer;color:var(--moon)}
     <button class="main" id="create">Tạo ván mới</button>
     <input id="code" placeholder="Mã ván (4 chữ cái)" maxlength="4" autocapitalize="characters">
     <button id="join">Vào ván</button>
-    <button id="install" class="hidden">📲 Cài app lên điện thoại</button>
-    <p class="tag hidden" id="ioshint">Trên iPhone: bấm nút Chia sẻ trong Safari, rồi chọn “Thêm vào MH chính”.</p>
+    <button id="install">📲 Tải app về điện thoại</button>
+    <p class="tag hidden" id="inshelp"></p>
     <p id="msg"></p>
   </section>
   <section id="game" class="hidden">
@@ -420,10 +420,15 @@ $('lbbtn').onclick = async () => {
 /* ---------- Cài như app (PWA) ---------- */
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 let installEv = null;
-window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEv = e; $('install').classList.remove('hidden'); });
-$('install').onclick = async () => { if (!installEv) return; installEv.prompt(); await installEv.userChoice; installEv = null; $('install').classList.add('hidden'); };
+if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) $('install').classList.add('hidden');
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEv = e; });
 window.addEventListener('appinstalled', () => $('install').classList.add('hidden'));
-if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !navigator.standalone) $('ioshint').classList.remove('hidden');
+$('install').onclick = async () => {
+  if (installEv) { installEv.prompt(); await installEv.userChoice; installEv = null; return; }
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent), t = $('inshelp');
+  t.textContent = ios ? 'iPhone/iPad: mở bằng Safari, bấm nút Chia sẻ rồi chọn “Thêm vào MH chính”.' : 'Android: bấm menu ⋮ của Chrome rồi chọn “Cài đặt ứng dụng” hoặc “Thêm vào màn hình chính”.';
+  t.classList.remove('hidden');
+};
 </script>
 </body>
 </html>
