@@ -195,24 +195,28 @@ const SFX = {
 $('mute').onclick = () => { mute = !mute; $('mute').textContent = mute ? '🔇' : '🔊'; applyMusic(); };
 
 /* ---------- Nhạc nền: một bản nhạc cho sảnh chờ và ban đêm, ban ngày im lặng ---------- */
-const bgm = new Audio('/music.mp3'); bgm.loop = true; bgm.volume = 0; bgm.preload = 'auto';
-let fadeT, musVol = (Number(localStorage.vol ?? 15) || 0) / 100;
+const bgm = new Audio('/music.mp3'); bgm.loop = true; bgm.preload = 'auto';
+let fadeT, musVol = (Number(localStorage.vol ?? 15) || 0) / 100, bgmGain = null;
+// iPhone/iPad bỏ qua bgm.volume, nên nhạc được đưa qua Web Audio (GainNode) để thanh trượt hoạt động trên mọi máy.
+function bgmGraph() {
+  if (bgmGain !== null) return;
+  try { ac = ac || new AudioContext(); const src = ac.createMediaElementSource(bgm); bgmGain = ac.createGain(); bgmGain.gain.value = 0; src.connect(bgmGain); bgmGain.connect(ac.destination); bgm.volume = 1; }
+  catch (e) { bgmGain = false; bgm.volume = 0; }
+}
 function fadeTo(v, done) {
-  clearInterval(fadeT);
-  fadeT = setInterval(() => {
-    const d = v - bgm.volume;
-    if (Math.abs(d) < .02) { bgm.volume = v; clearInterval(fadeT); if (done) done(); return; }
-    bgm.volume = Math.max(0, Math.min(1, bgm.volume + Math.sign(d) * .02));
-  }, 60);
+  clearTimeout(fadeT);
+  if (bgmGain) { const g = bgmGain.gain; if (ac.state !== 'running') ac.resume(); g.cancelScheduledValues(ac.currentTime); g.setTargetAtTime(v, ac.currentTime, .25); }
+  else bgm.volume = Math.min(1, v);
+  if (done) fadeT = setTimeout(done, 1200);
 }
 function applyMusic() {
   const want = !mute && st && (st.ph === 'night' || st.ph === 'lobby');
-  if (want) { if (bgm.paused) bgm.play().catch(() => {}); fadeTo(musVol); }
+  if (want) { bgmGraph(); if (bgm.paused) bgm.play().catch(() => {}); fadeTo(musVol); }
   else if (!bgm.paused) fadeTo(0, () => bgm.pause());
 }
 $('vol').value = Math.round(musVol * 100);
 $('vol').oninput = () => { musVol = $('vol').value / 100; localStorage.vol = $('vol').value; applyMusic(); };
-document.addEventListener('pointerdown', () => { if (ac && ac.state !== 'running') ac.resume(); applyMusic(); });
+['pointerdown', 'touchend', 'keydown'].forEach(ev => document.addEventListener(ev, () => { if (ac && ac.state !== 'running') ac.resume(); applyMusic(); }));
 
 
 /* ---------- Kết nối ---------- */
