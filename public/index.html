@@ -260,7 +260,7 @@ function render() {
   document.body.classList.toggle('day', st.ph === 'day' || st.ph === 'vote');
   $('ph').textContent = PH[st.ph] + (st.day ? ` · ngày ${st.day}` : '');
   $('players').innerHTML = st.P.map(q => `<button class="p ${q.a ? '' : 'dead'} ${pick.includes(q.i) ? 'sel' : ''}" data-i="${q.i}" ${can(q) ? '' : 'disabled'}>
-    <span>${st.dz.includes(q.i) ? '🔥 ' : ''}${st.mu === q.i && st.ph === 'day' ? '🤐 ' : ''}${esc(q.n)}${q.i === me ? ' (bạn)' : ''}</span><small class="r-${known(q) ? q.r : ''}">${known(q) && q.r ? ROLE[q.r] : ''}</small></button>`).join('');
+    <span>${st.dz.includes(q.i) ? '🔥 ' : ''}${st.mu === q.i && st.ph === 'day' ? '🤐 ' : ''}${esc(q.n)}${q.i === me ? ' (bạn)' : ''}</span><small class="r-${known(q) ? q.r : ''}">${[q.b ? '🤖 máy' : '', known(q) && q.r ? ROLE[q.r] : ''].filter(Boolean).join(' · ')}</small></button>`).join('');
   let h = '';
   if (role) h += `<div class="mycard">${card(role, 1)}</div><p>Vai của bạn: <b class="r-${role}">${ROLE[role]}</b>${m.a ? '' : ' (đã chết, bạn vẫn xem được ván chơi)'}</p>`;
   if (st.ph === 'lobby') h += `<p>Đã có ${st.P.length} người. Cần 5 đến 15 người để bắt đầu.</p>`;
@@ -380,7 +380,7 @@ function badge(p, sz = 46) {
 }
 function rankedResult() {
   const r = st.res;
-  const t = !r ? 'Đang tính điểm...' : `${r.quit ? 'Bỏ trận: ' : r.won ? 'Thắng: ' : 'Thua: '}${r.d > 0 ? '+' : ''}${r.d} điểm → ${rankTxt(r.pts)}`;
+  const t = !r ? 'Đang tính điểm...' : `${r.quit ? 'Bỏ trận: ' : r.won ? 'Thắng: ' : 'Thua: '}${r.d > 0 ? '+' : ''}${r.d} điểm → ${rankTxt(r.pts)}${st.bg ? ` (trận có máy: tính ${st.bg}% điểm)` : ''}`;
   return `<p><b>${t}</b></p><button id="home2">Về sảnh chính</button>`;
 }
 let cfg = null, gotRes = false;
@@ -406,9 +406,9 @@ fetch('/config').then(r => r.json()).then(c => {
 s.on('me', showMe);
 s.on('authfail', () => { localStorage.removeItem('auth'); showMe(null); });
 s.on('qs', on => $('queue').classList.toggle('hidden', !on));
-s.on('qn', x => { $('qtxt').textContent = `Đang tìm trận... ${x.n}/${x.need} người trong hàng chờ`; });
+s.on('qn', x => { $('qtxt').textContent = `Đang tìm trận... ${x.n}/${x.need} người trong hàng chờ. Nếu sau 10 giây chưa đủ người, hệ thống sẽ thêm máy vào chơi cùng.`; });
 s.on('state', x => { if (x.rk && x.ph === 'over' && x.res && !gotRes) { gotRes = true; if (localStorage.auth) s.emit('auth', localStorage.auth); } });
-$('rank').onclick = () => { $('qtxt').textContent = 'Đang tìm trận...'; s.emit('rq', tok); };
+$('rank').onclick = () => { $('qtxt').textContent = 'Đang tìm trận... Nếu sau 10 giây chưa đủ người, hệ thống sẽ thêm máy vào chơi cùng.'; s.emit('rq', tok); };
 $('qcancel').onclick = () => s.emit('rqx');
 $('logout').onclick = () => { localStorage.removeItem('auth'); showMe(null); location.reload(); };
 $('lbbtn').onclick = async () => {
